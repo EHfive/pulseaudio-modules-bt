@@ -1,0 +1,3 @@
+#define PACKAGE
+#define HAVE_ATOMIC_BUILTINS
+#define PACKAGE_VERSION "1.0.0"

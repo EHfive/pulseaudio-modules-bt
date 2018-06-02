@@ -1,0 +1,6 @@
+[submodule "pa"]
+	path = pa
+	url = https://github.com/pulseaudio/pulseaudio.git
+[submodule "libldac"]
+	path = libldac
+	url = https://android.googlesource.com/platform/external/libldac

@@ -7,28 +7,55 @@ add_definitions(-DHAVE_CONFIG_H)
 
 
 find_package(PkgConfig REQUIRED)
+find_package(PulseAudio REQUIRED)
 pkg_check_modules(DBUS REQUIRED "dbus-1")
+pkg_check_modules(SBC REQUIRED "sbc")
 
 include_directories(.)
 include_directories(pa/src)
 include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
 include_directories(${DBUS_INCLUDE_DIRS})
+include_directories(${SBC_INCLUDE_DIRS})
 
+set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread)
+
+MESSAGE(${MOD_LIBS})
 
 add_library(ldacBT_enc
         libldac/src/ldaclib.c
         libldac/src/ldacBT.c
         )
+
 target_link_libraries(ldacBT_enc m)
 
+add_library(bluez5-util SHARED
+        config.h
+        a2dp-codecs.h
+        backend-native.c
+        backend-ofono.c
+        bluez5-util.c
+        )
+target_link_libraries(bluez5-util ${DBUS_LIBS} ${MOD_LIBS})
+
+add_library(module-bluez5-discover SHARED
+        module-bluez5-discover.c
+        bluez5-util.h
+        config.h
+        )
+target_compile_definitions(module-bluez5-discover PUBLIC PA_MODULE_NAME=module_bluez5_discover)
+target_link_libraries(module-bluez5-discover bluez5-util ${DBUS_LIBS} ${MOD_LIBS})
+SET_TARGET_PROPERTIES(module-bluez5-discover PROPERTIES PREFIX "")
 
 add_library(module-bluez5-device SHARED
         module-bluez5-device.c
-        bluez5-util.c
+        bluez5-util.h
         a2dp-codecs.h
         rtp.h
         config.h
         )
 
-target_link_libraries(module-bluez5-device ldacBT_enc)
+target_compile_definitions(module-bluez5-device PUBLIC PA_MODULE_NAME=module_bluez5_device)
+target_link_libraries(module-bluez5-device ldacBT_enc bluez5-util ${SBC_LIBRARIES} ${MOD_LIBS})
+SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
+

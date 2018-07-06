@@ -3,7 +3,9 @@ project(pulseaudio_modules_bt C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-11.1/modules)
 add_definitions(-DHAVE_CONFIG_H)
+#add_definitions(-DENABLE_LDAC)
 
 
 find_package(PkgConfig REQUIRED)
@@ -17,10 +19,10 @@ include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
 include_directories(${DBUS_INCLUDE_DIRS})
 include_directories(${SBC_INCLUDE_DIRS})
+link_directories(/usr/lib/pulseaudio)
 
-set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread)
+set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-12.0 pulsecore-12.0)
 
-MESSAGE(${MOD_LIBS})
 
 add_library(ldacBT_enc
         libldac/src/ldaclib.c
@@ -36,7 +38,7 @@ add_library(bluez5-util SHARED
         backend-ofono.c
         bluez5-util.c
         )
-target_link_libraries(bluez5-util ${DBUS_LIBS} ${MOD_LIBS})
+target_link_libraries(bluez5-util ${DBUS_LIBRARIES} ${MOD_LIBS})
 
 add_library(module-bluez5-discover SHARED
         module-bluez5-discover.c
@@ -44,8 +46,10 @@ add_library(module-bluez5-discover SHARED
         config.h
         )
 target_compile_definitions(module-bluez5-discover PUBLIC PA_MODULE_NAME=module_bluez5_discover)
-target_link_libraries(module-bluez5-discover bluez5-util ${DBUS_LIBS} ${MOD_LIBS})
+target_link_libraries(module-bluez5-discover bluez5-util ${DBUS_LIBRARIES} ${MOD_LIBS})
+
 SET_TARGET_PROPERTIES(module-bluez5-discover PROPERTIES PREFIX "")
+
 
 add_library(module-bluez5-device SHARED
         module-bluez5-device.c
@@ -59,3 +63,8 @@ target_compile_definitions(module-bluez5-device PUBLIC PA_MODULE_NAME=module_blu
 target_link_libraries(module-bluez5-device ldacBT_enc bluez5-util ${SBC_LIBRARIES} ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
+
+
+
+INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util
+        LIBRARY DESTINATION /usr/lib/pulse-11.1/modules/)

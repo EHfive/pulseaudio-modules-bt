@@ -46,6 +46,7 @@
 #include <pulsecore/time-smoother.h>
 
 #include "a2dp-codecs.h"
+#include "ldacBT.h"
 #include "bluez5-util.h"
 #include "rtp.h"
 
@@ -105,6 +106,18 @@ typedef struct sbc_info {
     size_t buffer_size;                  /* Size of the buffer */
 } sbc_info_t;
 
+typedef struct ldac_info {
+    HANDLE_LDAC_BT hLdacBt;
+    uint8_t eqmid;
+    uint8_t channel_mode;
+    LDACBT_SMPL_FMT_T pcm_fmt;
+    uint8_t pcm_frequency;
+
+    void * buffer;
+    size_t buffer_size;
+
+} ldac_info_t;
+
 struct userdata {
     pa_module *module;
     pa_core *core;
@@ -146,6 +159,7 @@ struct userdata {
     pa_memchunk write_memchunk;
     pa_sample_spec sample_spec;
     struct sbc_info sbc_info;
+    struct ldac_info ldac_info;
 };
 
 typedef enum pa_bluetooth_form_factor {
@@ -1294,7 +1308,7 @@ static void transport_config(struct userdata *u) {
         u->sample_spec.format = PA_SAMPLE_S16LE;
         u->sample_spec.channels = 1;
         u->sample_spec.rate = 8000;
-    } else {
+    } else if(u->transport->codec == A2DP_CODEC_SBC) {
         sbc_info_t *sbc_info = &u->sbc_info;
         a2dp_sbc_t *config;
 
@@ -1401,6 +1415,62 @@ static void transport_config(struct userdata *u) {
         pa_log_info("SBC parameters: allocation=%u, subbands=%u, blocks=%u, bitpool=%u",
                     sbc_info->sbc.allocation, sbc_info->sbc.subbands ? 8 : 4, sbc_info->sbc.blocks, sbc_info->sbc.bitpool);
     }
+#ifdef ENABLE_LDAC
+    else if (u->transport->codec == A2DP_CODEC_VENDOR){
+        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
+        if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
+            a2dp_ldac_t * config = (a2dp_ldac_t *) vendor_codec;
+
+            pa_assert(u->transport);
+
+            u->sample_spec.format = PA_SAMPLE_S16LE;
+
+
+
+            switch (config->frequency) {
+                case LDACBT_SAMPLING_FREQ_044100:
+
+                    u->sample_spec.rate = 44100U;
+                    break;
+                case LDACBT_SAMPLING_FREQ_048000:
+
+                    u->sample_spec.rate = 48000U;
+                    break;
+                case LDACBT_SAMPLING_FREQ_088200:
+
+                    u->sample_spec.rate = 88200U;
+                    break;
+                case LDACBT_SAMPLING_FREQ_096000:
+
+                    u->sample_spec.rate = 96000U;
+                    break;
+                default:
+                    pa_assert_not_reached();
+            }
+
+            switch (config->channel_mode) {
+                case LDACBT_CHANNEL_MODE_MONO:
+
+                    u->sample_spec.channels = 1;
+                    break;
+                case LDACBT_CHANNEL_MODE_DUAL_CHANNEL:
+
+                    u->sample_spec.channels = 2;
+                    break;
+                case LDACBT_CHANNEL_MODE_STEREO:
+
+                    u->sample_spec.channels = 2;
+                    break;
+
+                default:
+                    pa_assert_not_reached();
+            }
+
+
+
+        }
+    }
+#endif
 }
 
 /* Run from main thread */

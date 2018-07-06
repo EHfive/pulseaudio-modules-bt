@@ -34,7 +34,7 @@
 #include <pulsecore/shared.h>
 
 #include "a2dp-codecs.h"
-
+#include "ldacBT.h"
 #include "bluez5-util.h"
 
 #define WAIT_FOR_PROFILES_TIMEOUT_USEC (3 * PA_USEC_PER_SEC)
@@ -50,6 +50,15 @@
 
 #define A2DP_SOURCE_ENDPOINT "/MediaEndpoint/A2DPSource"
 #define A2DP_SINK_ENDPOINT "/MediaEndpoint/A2DPSink"
+
+#define A2DP_SBC_SRC_ENDPOINT A2DP_SOURCE_ENDPOINT "/SBC"
+#define A2DP_SBC_SNK_ENDPOINT A2DP_SINK_ENDPOINT "/SBC"
+#define A2DP_VENDOR_SRC_ENDPOINT A2DP_SOURCE_ENDPOINT "/VENDOR"
+#define A2DP_VENDOR_SNK_ENDPOINT A2DP_SINK_ENDPOINT "/VENDOR"
+
+#define A2DP_LDAC_SRC_ENDPOINT A2DP_VENDOR_SRC_ENDPOINT "/LDAC"
+#define A2DP_LDAC_SNK_ENDPOINT A2DP_VENDOR_SNK_ENDPOINT "/LDAC"
+
 
 #define ENDPOINT_INTROSPECT_XML                                         \
     DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE                           \
@@ -95,7 +104,7 @@ struct pa_bluetooth_discovery {
 };
 
 static pa_dbus_pending* send_and_add_to_pending(pa_bluetooth_discovery *y, DBusMessage *m,
-                                                                  DBusPendingCallNotifyFunction func, void *call_data) {
+                                                DBusPendingCallNotifyFunction func, void *call_data) {
     pa_dbus_pending *p;
     DBusPendingCall *call;
 
@@ -176,11 +185,11 @@ static bool device_supports_profile(pa_bluetooth_device *device, pa_bluetooth_pr
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_A2DP_SOURCE);
         case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS)
-                || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS_ALT)
-                || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_HF);
+                   || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS_ALT)
+                   || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_HF);
         case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_AG)
-                || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_AG);
+                   || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_AG);
         case PA_BLUETOOTH_PROFILE_OFF:
             pa_assert_not_reached();
     }
@@ -390,7 +399,7 @@ static int bluez5_transport_acquire_cb(pa_bluetooth_transport *t, bool optional,
     if (omtu)
         *omtu = o;
 
-finish:
+    finish:
     dbus_message_unref(r);
     return ret;
 }
@@ -876,7 +885,7 @@ static void register_endpoint_reply(DBusPendingCall *pending, void *userdata) {
         goto finish;
     }
 
-finish:
+    finish:
     dbus_message_unref(r);
 
     PA_LLIST_REMOVE(pa_dbus_pending, y->pending, p);
@@ -888,8 +897,9 @@ finish:
 static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const char *endpoint, const char *uuid) {
     DBusMessage *m;
     DBusMessageIter i, d;
-    uint8_t codec = 0;
-
+    uint8_t codec;
+    void * capabilities_p;
+    size_t capabilities_size;
     pa_log_debug("Registering %s on adapter %s", endpoint, path);
 
     pa_assert_se(m = dbus_message_new_method_call(BLUEZ_SERVICE, path, BLUEZ_MEDIA_INTERFACE, "RegisterEndpoint"));
@@ -897,24 +907,54 @@ static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const
     dbus_message_iter_init_append(m, &i);
     pa_assert_se(dbus_message_iter_append_basic(&i, DBUS_TYPE_OBJECT_PATH, &endpoint));
     dbus_message_iter_open_container(&i, DBUS_TYPE_ARRAY, DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING DBUS_TYPE_STRING_AS_STRING
-                                         DBUS_TYPE_VARIANT_AS_STRING DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &d);
+                                                          DBUS_TYPE_VARIANT_AS_STRING DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &d);
     pa_dbus_append_basic_variant_dict_entry(&d, "UUID", DBUS_TYPE_STRING, &uuid);
-    pa_dbus_append_basic_variant_dict_entry(&d, "Codec", DBUS_TYPE_BYTE, &codec);
 
     if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SOURCE) || pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SINK)) {
-        a2dp_sbc_t capabilities;
 
-        capabilities.channel_mode = SBC_CHANNEL_MODE_MONO | SBC_CHANNEL_MODE_DUAL_CHANNEL | SBC_CHANNEL_MODE_STEREO |
-                                    SBC_CHANNEL_MODE_JOINT_STEREO;
-        capabilities.frequency = SBC_SAMPLING_FREQ_16000 | SBC_SAMPLING_FREQ_32000 | SBC_SAMPLING_FREQ_44100 |
-                                 SBC_SAMPLING_FREQ_48000;
-        capabilities.allocation_method = SBC_ALLOCATION_SNR | SBC_ALLOCATION_LOUDNESS;
-        capabilities.subbands = SBC_SUBBANDS_4 | SBC_SUBBANDS_8;
-        capabilities.block_length = SBC_BLOCK_LENGTH_4 | SBC_BLOCK_LENGTH_8 | SBC_BLOCK_LENGTH_12 | SBC_BLOCK_LENGTH_16;
-        capabilities.min_bitpool = MIN_BITPOOL;
-        capabilities.max_bitpool = MAX_BITPOOL;
+        if(endpoint_belong(A2DP_SBC_SRC_ENDPOINT,endpoint) || endpoint_belong(A2DP_SBC_SNK_ENDPOINT,endpoint)){
+            codec = A2DP_CODEC_SBC;
+            a2dp_sbc_t capabilities;
+            capabilities_size = sizeof(a2dp_sbc_t);
+            capabilities_p = & capabilities;
 
-        pa_dbus_append_basic_array_variant_dict_entry(&d, "Capabilities", DBUS_TYPE_BYTE, &capabilities, sizeof(capabilities));
+            capabilities.channel_mode = SBC_CHANNEL_MODE_MONO | SBC_CHANNEL_MODE_DUAL_CHANNEL | SBC_CHANNEL_MODE_STEREO |
+                                        SBC_CHANNEL_MODE_JOINT_STEREO;
+            capabilities.frequency = SBC_SAMPLING_FREQ_16000 | SBC_SAMPLING_FREQ_32000 | SBC_SAMPLING_FREQ_44100 |
+                                     SBC_SAMPLING_FREQ_48000;
+            capabilities.allocation_method = SBC_ALLOCATION_SNR | SBC_ALLOCATION_LOUDNESS;
+            capabilities.subbands = SBC_SUBBANDS_4 | SBC_SUBBANDS_8;
+            capabilities.block_length = SBC_BLOCK_LENGTH_4 | SBC_BLOCK_LENGTH_8 | SBC_BLOCK_LENGTH_12 | SBC_BLOCK_LENGTH_16;
+            capabilities.min_bitpool = MIN_BITPOOL;
+            capabilities.max_bitpool = MAX_BITPOOL;
+
+
+        }
+#ifdef ENABLE_LDAC
+            else if(endpoint_belong(A2DP_LDAC_SRC_ENDPOINT,endpoint)){
+            codec = A2DP_CODEC_VENDOR;
+            a2dp_ldac_t capabilities;
+            capabilities_size = sizeof(a2dp_ldac_t);
+            capabilities.info.vendor_id = LDAC_VENDOR_ID;
+            capabilities.info.codec_id = LDAC_CODEC_ID;
+            capabilities_p = & capabilities;
+
+            capabilities.frequency = LDACBT_SAMPLING_FREQ_044100 | LDACBT_SAMPLING_FREQ_048000 |
+                                     LDACBT_SAMPLING_FREQ_088200 | LDACBT_SAMPLING_FREQ_096000;
+            capabilities.channel_mode = LDACBT_CHANNEL_MODE_MONO | LDACBT_CHANNEL_MODE_DUAL_CHANNEL |
+                                        LDACBT_CHANNEL_MODE_STEREO;
+
+        }
+#endif
+        else{
+            pa_log_error("Unsupported EndPoint: %s",endpoint);
+            return;
+        }
+
+        pa_dbus_append_basic_variant_dict_entry(&d, "Codec", DBUS_TYPE_BYTE, &codec);
+        pa_dbus_append_basic_array_variant_dict_entry(&d, "Capabilities", DBUS_TYPE_BYTE, capabilities_p,
+                                                      (unsigned int) capabilities_size);
+
     }
 
     dbus_message_iter_close_container(&i, &d);
@@ -963,9 +1003,13 @@ static void parse_interfaces_and_properties(pa_bluetooth_discovery *y, DBusMessa
 
             if (!a->valid)
                 return;
+            // endpoint register first hava higher prority
+#ifdef ENABLE_LDAC
+            register_endpoint(y, path, A2DP_LDAC_SRC_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
+#endif
+            register_endpoint(y, path, A2DP_SBC_SRC_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
 
-            register_endpoint(y, path, A2DP_SOURCE_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
-            register_endpoint(y, path, A2DP_SINK_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SINK);
+            register_endpoint(y, path, A2DP_SBC_SNK_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SINK);
 
         } else if (pa_streq(interface, BLUEZ_DEVICE_INTERFACE)) {
 
@@ -1076,7 +1120,7 @@ static void get_managed_objects_reply(DBusPendingCall *pending, void *userdata) 
     if (!y->ofono_backend && y->headset_backend != HEADSET_BACKEND_NATIVE)
         y->ofono_backend = pa_bluetooth_ofono_backend_new(y->core, y);
 
-finish:
+    finish:
     dbus_message_unref(r);
 
     PA_LLIST_REMOVE(pa_dbus_pending, y->pending, p);
@@ -1251,7 +1295,7 @@ static DBusHandlerResult filter_cb(DBusConnection *bus, DBusMessage *m, void *us
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
     }
 
-fail:
+    fail:
     dbus_error_free(&err);
 
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -1322,6 +1366,7 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
     pa_bluetooth_transport *t;
     const char *sender, *path, *endpoint_path, *dev_path = NULL, *uuid = NULL;
     const uint8_t *config = NULL;
+    uint8_t codec=0;
     int size = 0;
     pa_bluetooth_profile_t p = PA_BLUETOOTH_PROFILE_OFF;
     DBusMessageIter args, props;
@@ -1368,10 +1413,10 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
             dbus_message_iter_get_basic(&value, &uuid);
 
             endpoint_path = dbus_message_get_path(m);
-            if (pa_streq(endpoint_path, A2DP_SOURCE_ENDPOINT)) {
+            if (endpoint_belong(A2DP_SOURCE_ENDPOINT, endpoint_path)) {
                 if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SOURCE))
                     p = PA_BLUETOOTH_PROFILE_A2DP_SINK;
-            } else if (pa_streq(endpoint_path, A2DP_SINK_ENDPOINT)) {
+            } else if (endpoint_belong(A2DP_SINK_ENDPOINT, endpoint_path)) {
                 if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SINK))
                     p = PA_BLUETOOTH_PROFILE_A2DP_SOURCE;
             }
@@ -1389,13 +1434,6 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
             dbus_message_iter_get_basic(&value, &dev_path);
         } else if (pa_streq(key, "Configuration")) {
             DBusMessageIter array;
-            a2dp_sbc_t *c;
-
-            if (var != DBUS_TYPE_ARRAY) {
-                pa_log_error("Property %s of wrong type %c", key, (char)var);
-                goto fail;
-            }
-
             dbus_message_iter_recurse(&value, &array);
             var = dbus_message_iter_get_arg_type(&array);
             if (var != DBUS_TYPE_BYTE) {
@@ -1404,43 +1442,90 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
             }
 
             dbus_message_iter_get_fixed_array(&array, &config, &size);
-            if (size != sizeof(a2dp_sbc_t)) {
-                pa_log_error("Configuration array of invalid size");
+        } else if (pa_streq(key, "Codec")){
+            if (var != DBUS_TYPE_BYTE) {
+                pa_log_error("Property %s of wrong type %c", key, (char)var);
                 goto fail;
             }
-
-            c = (a2dp_sbc_t *) config;
-
-            if (c->frequency != SBC_SAMPLING_FREQ_16000 && c->frequency != SBC_SAMPLING_FREQ_32000 &&
-                c->frequency != SBC_SAMPLING_FREQ_44100 && c->frequency != SBC_SAMPLING_FREQ_48000) {
-                pa_log_error("Invalid sampling frequency in configuration");
-                goto fail;
-            }
-
-            if (c->channel_mode != SBC_CHANNEL_MODE_MONO && c->channel_mode != SBC_CHANNEL_MODE_DUAL_CHANNEL &&
-                c->channel_mode != SBC_CHANNEL_MODE_STEREO && c->channel_mode != SBC_CHANNEL_MODE_JOINT_STEREO) {
-                pa_log_error("Invalid channel mode in configuration");
-                goto fail;
-            }
-
-            if (c->allocation_method != SBC_ALLOCATION_SNR && c->allocation_method != SBC_ALLOCATION_LOUDNESS) {
-                pa_log_error("Invalid allocation method in configuration");
-                goto fail;
-            }
-
-            if (c->subbands != SBC_SUBBANDS_4 && c->subbands != SBC_SUBBANDS_8) {
-                pa_log_error("Invalid SBC subbands in configuration");
-                goto fail;
-            }
-
-            if (c->block_length != SBC_BLOCK_LENGTH_4 && c->block_length != SBC_BLOCK_LENGTH_8 &&
-                c->block_length != SBC_BLOCK_LENGTH_12 && c->block_length != SBC_BLOCK_LENGTH_16) {
-                pa_log_error("Invalid block length in configuration");
-                goto fail;
-            }
+            dbus_message_iter_get_basic(&value, &codec);
         }
 
         dbus_message_iter_next(&props);
+    }
+
+    if(codec == A2DP_CODEC_SBC){
+        if (size != sizeof(a2dp_sbc_t)) {
+            pa_log_error("Configuration array of invalid size");
+            goto fail;
+        }
+
+        a2dp_sbc_t * c = (a2dp_sbc_t *) config;
+
+        if (c->frequency != SBC_SAMPLING_FREQ_16000 && c->frequency != SBC_SAMPLING_FREQ_32000 &&
+            c->frequency != SBC_SAMPLING_FREQ_44100 && c->frequency != SBC_SAMPLING_FREQ_48000) {
+            pa_log_error("Invalid sampling frequency in configuration");
+            goto fail;
+        }
+
+        if (c->channel_mode != SBC_CHANNEL_MODE_MONO && c->channel_mode != SBC_CHANNEL_MODE_DUAL_CHANNEL &&
+            c->channel_mode != SBC_CHANNEL_MODE_STEREO && c->channel_mode != SBC_CHANNEL_MODE_JOINT_STEREO) {
+            pa_log_error("Invalid channel mode in configuration");
+            goto fail;
+        }
+
+        if (c->allocation_method != SBC_ALLOCATION_SNR && c->allocation_method != SBC_ALLOCATION_LOUDNESS) {
+            pa_log_error("Invalid allocation method in configuration");
+            goto fail;
+        }
+
+        if (c->subbands != SBC_SUBBANDS_4 && c->subbands != SBC_SUBBANDS_8) {
+            pa_log_error("Invalid SBC subbands in configuration");
+            goto fail;
+        }
+
+        if (c->block_length != SBC_BLOCK_LENGTH_4 && c->block_length != SBC_BLOCK_LENGTH_8 &&
+            c->block_length != SBC_BLOCK_LENGTH_12 && c->block_length != SBC_BLOCK_LENGTH_16) {
+            pa_log_error("Invalid block length in configuration");
+            goto fail;
+        }
+    }else if (codec == A2DP_CODEC_VENDOR){
+        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) config;
+        if(vendor_codec->vendor_id == LDAC_VENDOR_ID && vendor_codec->codec_id == LDAC_CODEC_ID){
+#ifdef ENABLE_LDAC
+            if (size != sizeof(a2dp_ldac_t)) {
+                pa_log_error("LDAC Configuration array of invalid size");
+                goto fail;
+            }
+            a2dp_ldac_t * c = (a2dp_ldac_t *) config;
+            if(c->frequency != LDACBT_SAMPLING_FREQ_044100 && c->frequency != LDACBT_SAMPLING_FREQ_048000 &&
+                    c->frequency != LDACBT_SAMPLING_FREQ_088200 && c->frequency != LDACBT_SAMPLING_FREQ_096000){
+                pa_log_error("Invalid sampling frequency in LDAC configuration");
+                goto fail;
+            }
+
+            if(c->channel_mode != LDACBT_CHANNEL_MODE_STEREO && c->channel_mode != LDACBT_CHANNEL_MODE_DUAL_CHANNEL &&
+                    c->channel_mode != LDACBT_CHANNEL_MODE_MONO){
+                pa_log_error("Invalid channel mode in LDAC Configuration");
+                goto fail;
+            }
+#else
+            pa_log_error("Unsupport LDAC Codec");
+            goto fail;
+#endif
+
+        } else if (vendor_codec->vendor_id == APTX_VENDOR_ID && vendor_codec->codec_id == APTX_CODEC_ID){
+            pa_log_error("Unsupport Aptx Codec currently");
+            goto fail;
+        } else if (vendor_codec->vendor_id == APTX_HD_VENDOR_ID && vendor_codec->codec_id == APTX_HD_CODEC_ID){
+            pa_log_error("Unsupport Aptx HD Codec currently");
+            goto fail;
+        } else{
+            pa_log_error("Unsupported Vendor Codec:VENDOR_ID=%x CODEC_ID=%x",
+                         vendor_codec->vendor_id,vendor_codec->codec_id);
+        }
+    }else{
+        pa_log_error("Unsupported Codec %x",codec);
+        goto fail;
     }
 
     if ((d = pa_hashmap_get(y->devices, dev_path))) {
@@ -1466,6 +1551,7 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
     dbus_message_unref(r);
 
     t = pa_bluetooth_transport_new(d, sender, path, p, config, size);
+    t->codec = codec;
     t->acquire = bluez5_transport_acquire_cb;
     t->release = bluez5_transport_release_cb;
     pa_bluetooth_transport_put(t);
@@ -1474,18 +1560,18 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
 
     return NULL;
 
-fail:
+    fail:
     pa_log_error("Endpoint SetConfiguration(): invalid arguments");
 
-fail2:
+    fail2:
     pa_assert_se(r = dbus_message_new_error(m, "org.bluez.Error.InvalidArguments", "Unable to set configuration"));
     return r;
 }
 
 static DBusMessage *endpoint_select_configuration(DBusConnection *conn, DBusMessage *m, void *userdata) {
     pa_bluetooth_discovery *y = userdata;
-    a2dp_sbc_t *cap, config;
-    uint8_t *pconf = (uint8_t *) &config;
+    uint8_t *capabilities;
+
     int i, size;
     DBusMessage *r;
     DBusError err;
@@ -1493,120 +1579,207 @@ static DBusMessage *endpoint_select_configuration(DBusConnection *conn, DBusMess
     static const struct {
         uint32_t rate;
         uint8_t cap;
-    } freq_table[] = {
-        { 16000U, SBC_SAMPLING_FREQ_16000 },
-        { 32000U, SBC_SAMPLING_FREQ_32000 },
-        { 44100U, SBC_SAMPLING_FREQ_44100 },
-        { 48000U, SBC_SAMPLING_FREQ_48000 }
-    };
+    }
+            freq_table[] = {
+            { 16000U, SBC_SAMPLING_FREQ_16000 },
+            { 32000U, SBC_SAMPLING_FREQ_32000 },
+            { 44100U, SBC_SAMPLING_FREQ_44100 },
+            { 48000U, SBC_SAMPLING_FREQ_48000 }
+    }
+#ifdef ENABLE_LDAC
+    ,ldac_freq_table[] = {
+            {44100U, LDACBT_SAMPLING_FREQ_044100},
+            {48000U, LDACBT_SAMPLING_FREQ_048000},
+            {88200U, LDACBT_SAMPLING_FREQ_088200},
+            {96000U, LDACBT_SAMPLING_FREQ_096000}
+    }
+#endif
+    ;
 
     dbus_error_init(&err);
 
-    if (!dbus_message_get_args(m, &err, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &cap, &size, DBUS_TYPE_INVALID)) {
+    if (!dbus_message_get_args(m, &err, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &capabilities, &size, DBUS_TYPE_INVALID)) {
         pa_log_error("Endpoint SelectConfiguration(): %s", err.message);
         dbus_error_free(&err);
         goto fail;
     }
-
-    if (size != sizeof(config)) {
-        pa_log_error("Capabilities array has invalid size");
-        goto fail;
-    }
-
-    pa_zero(config);
-
-    /* Find the lowest freq that is at least as high as the requested sampling rate */
-    for (i = 0; (unsigned) i < PA_ELEMENTSOF(freq_table); i++)
-        if (freq_table[i].rate >= y->core->default_sample_spec.rate && (cap->frequency & freq_table[i].cap)) {
-            config.frequency = freq_table[i].cap;
-            break;
+    const char * endpoint = dbus_message_get_path(m);
+    if(endpoint_belong(A2DP_SBC_SRC_ENDPOINT,endpoint) || endpoint_belong(A2DP_SBC_SNK_ENDPOINT,endpoint)){
+        a2dp_sbc_t config,*cap = (a2dp_sbc_t *) capabilities;
+        uint8_t *pconf = (uint8_t *) &config;
+        if (size != sizeof(config)) {
+            pa_log_error("Capabilities array has invalid size");
+            goto fail;
         }
 
-    if ((unsigned) i == PA_ELEMENTSOF(freq_table)) {
-        for (--i; i >= 0; i--) {
-            if (cap->frequency & freq_table[i].cap) {
+        pa_zero(config);
+
+        /* Find the lowest freq that is at least as high as the requested sampling rate */
+        for (i = 0; (unsigned) i < PA_ELEMENTSOF(freq_table); i++)
+            if (freq_table[i].rate >= y->core->default_sample_spec.rate && (cap->frequency & freq_table[i].cap)) {
                 config.frequency = freq_table[i].cap;
                 break;
             }
+
+        if ((unsigned) i == PA_ELEMENTSOF(freq_table)) {
+            for (--i; i >= 0; i--) {
+                if (cap->frequency & freq_table[i].cap) {
+                    config.frequency = freq_table[i].cap;
+                    break;
+                }
+            }
+
+            if (i < 0) {
+                pa_log_error("Not suitable sample rate");
+                goto fail;
+            }
         }
 
-        if (i < 0) {
-            pa_log_error("Not suitable sample rate");
-            goto fail;
+        pa_assert((unsigned) i < PA_ELEMENTSOF(freq_table));
+
+        if (y->core->default_sample_spec.channels <= 1) {
+            if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)
+                config.channel_mode = SBC_CHANNEL_MODE_MONO;
+            else if (cap->channel_mode & SBC_CHANNEL_MODE_JOINT_STEREO)
+                config.channel_mode = SBC_CHANNEL_MODE_JOINT_STEREO;
+            else if (cap->channel_mode & SBC_CHANNEL_MODE_STEREO)
+                config.channel_mode = SBC_CHANNEL_MODE_STEREO;
+            else if (cap->channel_mode & SBC_CHANNEL_MODE_DUAL_CHANNEL)
+                config.channel_mode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
+            else {
+                pa_log_error("No supported channel modes");
+                goto fail;
+            }
         }
-    }
 
-    pa_assert((unsigned) i < PA_ELEMENTSOF(freq_table));
+        if (y->core->default_sample_spec.channels >= 2) {
+            if (cap->channel_mode & SBC_CHANNEL_MODE_JOINT_STEREO)
+                config.channel_mode = SBC_CHANNEL_MODE_JOINT_STEREO;
+            else if (cap->channel_mode & SBC_CHANNEL_MODE_STEREO)
+                config.channel_mode = SBC_CHANNEL_MODE_STEREO;
+            else if (cap->channel_mode & SBC_CHANNEL_MODE_DUAL_CHANNEL)
+                config.channel_mode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
+            else if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)
+                config.channel_mode = SBC_CHANNEL_MODE_MONO;
+            else {
+                pa_log_error("No supported channel modes");
+                goto fail;
+            }
+        }
 
-    if (y->core->default_sample_spec.channels <= 1) {
-        if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)
-            config.channel_mode = SBC_CHANNEL_MODE_MONO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_JOINT_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_JOINT_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_DUAL_CHANNEL)
-            config.channel_mode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
+        if (cap->block_length & SBC_BLOCK_LENGTH_16)
+            config.block_length = SBC_BLOCK_LENGTH_16;
+        else if (cap->block_length & SBC_BLOCK_LENGTH_12)
+            config.block_length = SBC_BLOCK_LENGTH_12;
+        else if (cap->block_length & SBC_BLOCK_LENGTH_8)
+            config.block_length = SBC_BLOCK_LENGTH_8;
+        else if (cap->block_length & SBC_BLOCK_LENGTH_4)
+            config.block_length = SBC_BLOCK_LENGTH_4;
         else {
-            pa_log_error("No supported channel modes");
+            pa_log_error("No supported block lengths");
             goto fail;
         }
-    }
 
-    if (y->core->default_sample_spec.channels >= 2) {
-        if (cap->channel_mode & SBC_CHANNEL_MODE_JOINT_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_JOINT_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_DUAL_CHANNEL)
-            config.channel_mode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)
-            config.channel_mode = SBC_CHANNEL_MODE_MONO;
+        if (cap->subbands & SBC_SUBBANDS_8)
+            config.subbands = SBC_SUBBANDS_8;
+        else if (cap->subbands & SBC_SUBBANDS_4)
+            config.subbands = SBC_SUBBANDS_4;
         else {
-            pa_log_error("No supported channel modes");
+            pa_log_error("No supported subbands");
             goto fail;
         }
+
+        if (cap->allocation_method & SBC_ALLOCATION_LOUDNESS)
+            config.allocation_method = SBC_ALLOCATION_LOUDNESS;
+        else if (cap->allocation_method & SBC_ALLOCATION_SNR)
+            config.allocation_method = SBC_ALLOCATION_SNR;
+
+        config.min_bitpool = (uint8_t) PA_MAX(MIN_BITPOOL, cap->min_bitpool);
+        config.max_bitpool = (uint8_t) PA_MIN(a2dp_default_bitpool(config.frequency, config.channel_mode), cap->max_bitpool);
+
+        if (config.min_bitpool > config.max_bitpool)
+            goto fail;
+
+        pa_assert_se(r = dbus_message_new_method_return(m));
+        pa_assert_se(dbus_message_append_args(r, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &pconf, size, DBUS_TYPE_INVALID));
+
+        return r;
     }
+#ifdef ENABLE_LDAC
+    else if(endpoint_belong(A2DP_LDAC_SRC_ENDPOINT,endpoint)){
+        pa_log_debug("Selecting LDAC Configuration");
+        a2dp_ldac_t config,*cap = (a2dp_ldac_t *) capabilities;
+        uint8_t *pconf = (uint8_t *) &config;
 
-    if (cap->block_length & SBC_BLOCK_LENGTH_16)
-        config.block_length = SBC_BLOCK_LENGTH_16;
-    else if (cap->block_length & SBC_BLOCK_LENGTH_12)
-        config.block_length = SBC_BLOCK_LENGTH_12;
-    else if (cap->block_length & SBC_BLOCK_LENGTH_8)
-        config.block_length = SBC_BLOCK_LENGTH_8;
-    else if (cap->block_length & SBC_BLOCK_LENGTH_4)
-        config.block_length = SBC_BLOCK_LENGTH_4;
-    else {
-        pa_log_error("No supported block lengths");
-        goto fail;
+
+        if (size != sizeof(config)) {
+            pa_log_error("Capabilities array has invalid size");
+            goto fail;
+        }
+
+        pa_zero(config);
+
+        config.info.vendor_id = LDAC_VENDOR_ID;
+        config.info.codec_id = LDAC_CODEC_ID;
+
+        /* Find the lowest freq that is at least as high as the requested sampling rate */
+        for (i = 0; (unsigned) i < PA_ELEMENTSOF(ldac_freq_table); i++)
+            if (ldac_freq_table[i].rate >= y->core->default_sample_spec.rate && (cap->frequency & ldac_freq_table[i].cap)) {
+                config.frequency = ldac_freq_table[i].cap;
+                break;
+            }
+
+        if ((unsigned) i == PA_ELEMENTSOF(ldac_freq_table)) {
+            for (--i; i >= 0; i--) {
+                if (cap->frequency & ldac_freq_table[i].cap) {
+                    config.frequency = ldac_freq_table[i].cap;
+                    break;
+                }
+            }
+
+            if (i < 0) {
+                pa_log_error("Not suitable sample rate");
+                goto fail;
+            }
+        }
+
+        pa_assert((unsigned) i < PA_ELEMENTSOF(ldac_freq_table));
+
+        if (y->core->default_sample_spec.channels <= 1) {
+            if (cap->channel_mode & LDACBT_CHANNEL_MODE_MONO)
+                config.channel_mode = LDACBT_CHANNEL_MODE_MONO;
+            else if (cap->channel_mode & LDACBT_CHANNEL_MODE_STEREO)
+                config.channel_mode = LDACBT_CHANNEL_MODE_STEREO;
+            else if (cap->channel_mode & LDACBT_CHANNEL_MODE_DUAL_CHANNEL)
+                config.channel_mode = LDACBT_CHANNEL_MODE_DUAL_CHANNEL;
+            else {
+                pa_log_error("No supported channel modes");
+                goto fail;
+            }
+        }
+
+        if (y->core->default_sample_spec.channels >= 2) {
+            if (cap->channel_mode & LDACBT_CHANNEL_MODE_STEREO)
+                config.channel_mode = LDACBT_CHANNEL_MODE_STEREO;
+            else if (cap->channel_mode & LDACBT_CHANNEL_MODE_DUAL_CHANNEL)
+                config.channel_mode = LDACBT_CHANNEL_MODE_DUAL_CHANNEL;
+            else if (cap->channel_mode & LDACBT_CHANNEL_MODE_MONO)
+                config.channel_mode = LDACBT_CHANNEL_MODE_MONO;
+            else {
+                pa_log_error("No supported channel modes");
+                goto fail;
+            }
+        }
+        pa_log_debug("LDAC channel_mode=%X frequency=%X;CAP channel_mode=%X frequency=%X",
+                    config.channel_mode,config.frequency,cap->channel_mode,cap->frequency);
+        pa_assert_se(r = dbus_message_new_method_return(m));
+        pa_assert_se(dbus_message_append_args(r, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &pconf, size, DBUS_TYPE_INVALID));
+
+        return r;
     }
+#endif
 
-    if (cap->subbands & SBC_SUBBANDS_8)
-        config.subbands = SBC_SUBBANDS_8;
-    else if (cap->subbands & SBC_SUBBANDS_4)
-        config.subbands = SBC_SUBBANDS_4;
-    else {
-        pa_log_error("No supported subbands");
-        goto fail;
-    }
-
-    if (cap->allocation_method & SBC_ALLOCATION_LOUDNESS)
-        config.allocation_method = SBC_ALLOCATION_LOUDNESS;
-    else if (cap->allocation_method & SBC_ALLOCATION_SNR)
-        config.allocation_method = SBC_ALLOCATION_SNR;
-
-    config.min_bitpool = (uint8_t) PA_MAX(MIN_BITPOOL, cap->min_bitpool);
-    config.max_bitpool = (uint8_t) PA_MIN(a2dp_default_bitpool(config.frequency, config.channel_mode), cap->max_bitpool);
-
-    if (config.min_bitpool > config.max_bitpool)
-        goto fail;
-
-    pa_assert_se(r = dbus_message_new_method_return(m));
-    pa_assert_se(dbus_message_append_args(r, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &pconf, size, DBUS_TYPE_INVALID));
-
-    return r;
-
-fail:
+    fail:
     pa_assert_se(r = dbus_message_new_error(m, "org.bluez.Error.InvalidArguments", "Unable to select configuration"));
     return r;
 }
@@ -1635,7 +1808,7 @@ static DBusMessage *endpoint_clear_configuration(DBusConnection *conn, DBusMessa
 
     return r;
 
-fail:
+    fail:
     pa_assert_se(r = dbus_message_new_error(m, "org.bluez.Error.InvalidArguments", "Unable to clear configuration"));
     return r;
 }
@@ -1677,7 +1850,7 @@ static DBusHandlerResult endpoint_handler(DBusConnection *c, DBusMessage *m, voi
 
     pa_log_debug("dbus: path=%s, interface=%s, member=%s", path, interface, member);
 
-    if (!pa_streq(path, A2DP_SOURCE_ENDPOINT) && !pa_streq(path, A2DP_SINK_ENDPOINT))
+    if (!endpoint_belong(A2DP_SOURCE_ENDPOINT,path) && !endpoint_belong(A2DP_SINK_ENDPOINT,path))
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
     if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Introspectable", "Introspect")) {
@@ -1707,18 +1880,22 @@ static DBusHandlerResult endpoint_handler(DBusConnection *c, DBusMessage *m, voi
 
 static void endpoint_init(pa_bluetooth_discovery *y, pa_bluetooth_profile_t profile) {
     static const DBusObjectPathVTable vtable_endpoint = {
-        .message_function = endpoint_handler,
+            .message_function = endpoint_handler,
     };
 
     pa_assert(y);
 
     switch(profile) {
         case PA_BLUETOOTH_PROFILE_A2DP_SINK:
-            pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SOURCE_ENDPOINT,
+            pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SBC_SRC_ENDPOINT,
                                                               &vtable_endpoint, y));
+#ifdef ENABLE_LDAC
+        pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_LDAC_SRC_ENDPOINT,
+                                                              &vtable_endpoint, y));
+#endif
             break;
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
-            pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SINK_ENDPOINT,
+            pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SBC_SNK_ENDPOINT,
                                                               &vtable_endpoint, y));
             break;
         default:
@@ -1732,10 +1909,13 @@ static void endpoint_done(pa_bluetooth_discovery *y, pa_bluetooth_profile_t prof
 
     switch(profile) {
         case PA_BLUETOOTH_PROFILE_A2DP_SINK:
-            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SOURCE_ENDPOINT);
+            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SBC_SRC_ENDPOINT);
+#ifdef ENABLE_LDAC
+            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_LDAC_SRC_ENDPOINT);
+#endif
             break;
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
-            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SINK_ENDPOINT);
+            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SBC_SNK_ENDPOINT);
             break;
         default:
             pa_assert_not_reached();
@@ -1782,18 +1962,18 @@ pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backe
     y->filter_added = true;
 
     if (pa_dbus_add_matches(conn, &err,
-            "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged'"
-            ",arg0='" BLUEZ_SERVICE "'",
-            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',member='InterfacesAdded'",
-            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',"
-            "member='InterfacesRemoved'",
-            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"
-            ",arg0='" BLUEZ_ADAPTER_INTERFACE "'",
-            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"
-            ",arg0='" BLUEZ_DEVICE_INTERFACE "'",
-            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"
-            ",arg0='" BLUEZ_MEDIA_TRANSPORT_INTERFACE "'",
-            NULL) < 0) {
+                            "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged'"
+                            ",arg0='" BLUEZ_SERVICE "'",
+                            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',member='InterfacesAdded'",
+                            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',"
+                            "member='InterfacesRemoved'",
+                            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"
+                            ",arg0='" BLUEZ_ADAPTER_INTERFACE "'",
+                            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"
+                            ",arg0='" BLUEZ_DEVICE_INTERFACE "'",
+                            "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"
+                            ",arg0='" BLUEZ_MEDIA_TRANSPORT_INTERFACE "'",
+                            NULL) < 0) {
         pa_log_error("Failed to add D-Bus matches: %s", err.message);
         goto fail;
     }
@@ -1806,7 +1986,7 @@ pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backe
 
     return y;
 
-fail:
+    fail:
     pa_bluetooth_discovery_unref(y);
     dbus_error_free(&err);
 
@@ -1851,19 +2031,19 @@ void pa_bluetooth_discovery_unref(pa_bluetooth_discovery *y) {
 
         if (y->matches_added)
             pa_dbus_remove_matches(pa_dbus_connection_get(y->connection),
-                "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',"
-                "arg0='" BLUEZ_SERVICE "'",
-                "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',"
-                "member='InterfacesAdded'",
-                "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',"
-                "member='InterfacesRemoved'",
-                "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',"
-                "member='PropertiesChanged',arg0='" BLUEZ_ADAPTER_INTERFACE "'",
-                "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',"
-                "member='PropertiesChanged',arg0='" BLUEZ_DEVICE_INTERFACE "'",
-                "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',"
-                "member='PropertiesChanged',arg0='" BLUEZ_MEDIA_TRANSPORT_INTERFACE "'",
-                NULL);
+                                   "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+                                   "arg0='" BLUEZ_SERVICE "'",
+                                   "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',"
+                                   "member='InterfacesAdded'",
+                                   "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.ObjectManager',"
+                                   "member='InterfacesRemoved'",
+                                   "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',"
+                                   "member='PropertiesChanged',arg0='" BLUEZ_ADAPTER_INTERFACE "'",
+                                   "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',"
+                                   "member='PropertiesChanged',arg0='" BLUEZ_DEVICE_INTERFACE "'",
+                                   "type='signal',sender='" BLUEZ_SERVICE "',interface='org.freedesktop.DBus.Properties',"
+                                   "member='PropertiesChanged',arg0='" BLUEZ_MEDIA_TRANSPORT_INTERFACE "'",
+                                   NULL);
 
         if (y->filter_added)
             dbus_connection_remove_filter(pa_dbus_connection_get(y->connection), filter_cb, y);

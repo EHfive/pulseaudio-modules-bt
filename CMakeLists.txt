@@ -3,7 +3,7 @@ project(pulseaudio_modules_bt C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-11.1/modules)
+set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-12.0/modules)
 add_definitions(-DHAVE_CONFIG_H)
 #add_definitions(-DENABLE_LDAC)
 
@@ -67,4 +67,4 @@ SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
 
 INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util
-        LIBRARY DESTINATION /usr/lib/pulse-11.1/modules/)
+        LIBRARY DESTINATION /usr/lib/pulse-12.0/modules/)

@@ -1580,7 +1580,7 @@ static DBusMessage *endpoint_select_configuration(DBusConnection *conn, DBusMess
         uint32_t rate;
         uint8_t cap;
     }
-            freq_table[] = {
+    freq_table[] = {
             { 16000U, SBC_SAMPLING_FREQ_16000 },
             { 32000U, SBC_SAMPLING_FREQ_32000 },
             { 44100U, SBC_SAMPLING_FREQ_44100 },

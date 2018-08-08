@@ -65,6 +65,7 @@ PA_MODULE_USAGE("path=<device object path>"
 #define BITPOOL_DEC_LIMIT 32
 #define BITPOOL_DEC_STEP 5
 #define HSP_MAX_GAIN 15
+#define AVDT_MEDIA_HDR_SIZE 12
 
 static const char* const valid_modargs[] = {
     "path",
@@ -111,8 +112,8 @@ typedef struct ldac_info {
     uint8_t eqmid;
     uint8_t channel_mode;
     LDACBT_SMPL_FMT_T pcm_fmt;
-    uint8_t pcm_frequency;
-
+    int pcm_frequency;
+    uint16_t seq_num;
     void * buffer;
     size_t buffer_size;
 
@@ -431,12 +432,24 @@ static void a2dp_prepare_buffer(struct userdata *u) {
 
     pa_assert(u);
 
-    if (u->sbc_info.buffer_size >= min_buffer_size)
-        return;
+    if(u->transport->codec == A2DP_CODEC_SBC){
+        if (u->sbc_info.buffer_size >= min_buffer_size)
+            return;
 
-    u->sbc_info.buffer_size = 2 * min_buffer_size;
-    pa_xfree(u->sbc_info.buffer);
-    u->sbc_info.buffer = pa_xmalloc(u->sbc_info.buffer_size);
+        u->sbc_info.buffer_size = 2 * min_buffer_size;
+        pa_xfree(u->sbc_info.buffer);
+        u->sbc_info.buffer = pa_xmalloc(u->sbc_info.buffer_size);
+    }else if (u->transport->codec == A2DP_CODEC_VENDOR){
+        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
+        if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
+            if (u->ldac_info.buffer_size >= min_buffer_size)
+                return;
+
+            u->ldac_info.buffer_size = 2 * min_buffer_size;
+            pa_xfree(u->ldac_info.buffer);
+            u->ldac_info.buffer = pa_xmalloc(u->ldac_info.buffer_size);
+        }
+    }
 }
 
 /* Run from IO thread */
@@ -686,6 +699,139 @@ static int a2dp_process_push(struct userdata *u) {
     return ret;
 }
 
+static int ldac_process_render(struct userdata *u) {
+    struct ldac_info *ldac_info;
+    struct rtp_header *header;
+    struct rtp_payload *payload;
+    size_t nbytes;
+    void *d;
+    const void *p;
+    size_t to_write, to_encode;
+    unsigned frame_count;
+    int ret = 0;
+
+    pa_assert(u);
+    pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
+    pa_assert(u->sink);
+
+    /* First, render some data */
+    if (!u->write_memchunk.memblock)
+        pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
+
+    pa_assert(u->write_memchunk.length == u->write_block_size);
+
+    a2dp_prepare_buffer(u);
+
+    ldac_info = &u->ldac_info;
+    header = ldac_info->buffer;
+    payload = (struct rtp_payload*) ((uint8_t*) ldac_info->buffer + sizeof(*header));
+
+    frame_count = 0;
+
+    /* Try to create a packet of the full MTU */
+
+    p = (uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
+    to_encode = u->write_memchunk.length;
+
+    d = (uint8_t*) ldac_info->buffer + sizeof(*header) + sizeof(*payload);
+    to_write = ldac_info->buffer_size - sizeof(*header) - sizeof(*payload);
+
+    while (PA_LIKELY(to_encode > 0 && to_write > 0)) {
+        int written;
+        int encoded;
+        int ldac_frame_num;
+        int ret_code;
+//        encoded = sbc_encode(&sbc_info->sbc,
+//                             p, to_encode,
+//                             d, to_write,
+//                             &written);
+        ret_code = ldacBT_encode(u->ldac_info.hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
+
+        if (PA_UNLIKELY(ret_code < 0)) {
+            pa_log_error("LDAC encoding error, written:%d encoded:%d ldac_frame_num:%d",written,encoded,ldac_frame_num);
+            int err = ldacBT_get_error_code(u->ldac_info.hLdacBt);
+            pa_log_error("LDACBT_API_ERR:%d  LDACBT_HANDLE_ERR:%d  LDACBT_BLOCK_ERR:%d",LDACBT_API_ERR(err),LDACBT_HANDLE_ERR(err),LDACBT_BLOCK_ERR(err));
+
+//            pa_memblock_release(u->write_memchunk.memblock);
+//            return -1;
+        }
+
+        pa_assert_fp((size_t) encoded <= to_encode);
+        pa_assert_fp((size_t) written <= to_write);
+
+
+        p = (const uint8_t*) p + encoded;
+        to_encode -= encoded;
+
+        d = (uint8_t*) d + written;
+        to_write -= written;
+
+        frame_count+=ldac_frame_num;
+    }
+
+    pa_memblock_release(u->write_memchunk.memblock);
+
+    pa_assert(to_encode == 0);
+
+    PA_ONCE_BEGIN {
+                    pa_log_debug("Using LDAC encoder version: %x", ldacBT_get_version());
+                } PA_ONCE_END;
+
+    /* write it to the fifo */
+    memset(ldac_info->buffer, 0, sizeof(*header) + sizeof(*payload));
+    header->v = 2;
+    header->pt = 1;
+    header->sequence_number = htons(ldac_info->seq_num++);
+    header->timestamp = htonl(u->write_index / pa_frame_size(&u->sample_spec));
+    header->ssrc = htonl(1);
+    payload->frame_count = frame_count;
+
+    nbytes = (uint8_t*) d - (uint8_t*) ldac_info->buffer;
+    for (;;) {
+        ssize_t l;
+
+        l = pa_write(u->stream_fd, ldac_info->buffer, nbytes, &u->stream_write_type);
+
+        pa_assert(l != 0);
+
+        if (l < 0) {
+
+            if (errno == EINTR)
+                /* Retry right away if we got interrupted */
+                continue;
+
+            else if (errno == EAGAIN) {
+                /* Hmm, apparently the socket was not writable, give up for now */
+                pa_log_debug("Got EAGAIN on write() after POLLOUT, probably there is a temporary connection loss.");
+                break;
+            }
+
+            pa_log_error("Failed to write data to socket: %s", pa_cstrerror(errno));
+            ret = -1;
+            break;
+        }
+
+        pa_assert((size_t) l <= nbytes);
+
+        if ((size_t) l != nbytes) {
+            pa_log_warn("Wrote memory block to socket only partially! %llu written, wanted to write %llu.",
+                        (unsigned long long) l,
+                        (unsigned long long) nbytes);
+            ret = -1;
+            break;
+        }
+
+        u->write_index += (uint64_t) u->write_memchunk.length;
+        pa_memblock_unref(u->write_memchunk.memblock);
+        pa_memchunk_reset(&u->write_memchunk);
+
+        ret = 1;
+
+        break;
+    }
+
+    return ret;
+}
 static void update_buffer_size(struct userdata *u) {
     int old_bufsize;
     socklen_t len = sizeof(int);
@@ -717,7 +863,20 @@ static void update_buffer_size(struct userdata *u) {
         }
     }
 }
+static void a2dp_set_sink(struct userdata *u){
+    pa_sink_set_max_request_within_thread(u->sink, u->write_block_size);
+    pa_sink_set_fixed_latency_within_thread(u->sink,
+                                            FIXED_LATENCY_PLAYBACK_A2DP + pa_bytes_to_usec(u->write_block_size, &u->sample_spec));
 
+    /* If there is still data in the memchunk, we have to discard it
+     * because the write_block_size may have changed. */
+    if (u->write_memchunk.memblock) {
+        pa_memblock_unref(u->write_memchunk.memblock);
+        pa_memchunk_reset(&u->write_memchunk);
+    }
+
+    update_buffer_size(u);
+}
 /* Run from I/O thread */
 static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
     struct sbc_info *sbc_info;
@@ -748,20 +907,11 @@ static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
     u->write_block_size =
             (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
             / sbc_info->frame_length * sbc_info->codesize;
-
-    pa_sink_set_max_request_within_thread(u->sink, u->write_block_size);
-    pa_sink_set_fixed_latency_within_thread(u->sink,
-                                            FIXED_LATENCY_PLAYBACK_A2DP + pa_bytes_to_usec(u->write_block_size, &u->sample_spec));
-
-    /* If there is still data in the memchunk, we have to discard it
-     * because the write_block_size may have changed. */
-    if (u->write_memchunk.memblock) {
-        pa_memblock_unref(u->write_memchunk.memblock);
-        pa_memchunk_reset(&u->write_memchunk);
-    }
-
+    a2dp_set_sink(u);
     update_buffer_size(u);
 }
+
+
 
 /* Run from I/O thread */
 static void a2dp_reduce_bitpool(struct userdata *u) {
@@ -872,7 +1022,7 @@ static void transport_config_mtu(struct userdata *u) {
             pa_log_debug("Got invalid write MTU: %lu, rounding down", u->write_block_size);
             u->write_block_size = pa_frame_align(u->write_block_size, &u->sink->sample_spec);
         }
-    } else {
+    } else if(u->transport->codec == A2DP_CODEC_SBC){
         u->read_block_size =
                 (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
                 / u->sbc_info.frame_length * u->sbc_info.codesize;
@@ -880,6 +1030,45 @@ static void transport_config_mtu(struct userdata *u) {
         u->write_block_size =
                 (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
                 / u->sbc_info.frame_length * u->sbc_info.codesize;
+    } else if(u->transport->codec == A2DP_CODEC_VENDOR){
+
+        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
+        if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
+            int pkg_size,lsu;
+            int pcm_frequency = u->ldac_info.pcm_frequency;
+            int bits = u->ldac_info.pcm_fmt;
+            int channel = u->ldac_info.channel_mode == LDACBT_CHANNEL_MODE_MONO ? 1:2;
+            switch (u->ldac_info.eqmid){
+                case LDACBT_EQMID_HQ:
+                    pkg_size = 330;
+                    break;
+                case LDACBT_EQMID_MQ:
+                    pkg_size = 220;
+                    break;
+                case LDACBT_EQMID_SQ:
+                    pkg_size = 110;
+                    break;
+                default:
+                    u->ldac_info.eqmid = LDACBT_EQMID_MQ;
+                    pkg_size = 220;
+            }
+
+            if (pcm_frequency == 44100 || pcm_frequency == 48000)
+                lsu = 128;
+            else if (pcm_frequency == 88200 || pcm_frequency == 96000)
+                lsu = 256;
+            else{
+                lsu = 128;
+                pa_log_error("Unknown pcm frequency:%d",pcm_frequency);
+            }
+            u->write_block_size =
+                    (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
+                    /pkg_size * (lsu * bits * channel);
+                    // /330 * 512;
+            pa_log_debug("LDAC transport write_block_size=%d pkg_size=%d lsu=%d bits/sample=%d channel=%d",
+                         (int) u->write_block_size,pkg_size,lsu,bits,channel);
+
+        }
     }
 
     if (u->sink) {
@@ -920,7 +1109,24 @@ static void setup_stream(struct userdata *u) {
     pa_log_debug("Stream properly set up, we're ready to roll!");
 
     if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-        a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
+        if(u->transport->codec == A2DP_CODEC_SBC)
+            a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
+        else if(u->transport->codec == A2DP_CODEC_VENDOR){
+            int ret;
+            a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
+            if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID) {
+                if(u->ldac_info.hLdacBt){
+                    ldacBT_free_handle(u->ldac_info.hLdacBt);
+                }
+                u->ldac_info.hLdacBt = ldacBT_get_handle();
+                ret = ldacBT_init_handle_encode(u->ldac_info.hLdacBt, (int) u->write_link_mtu + AVDT_MEDIA_HDR_SIZE, u->ldac_info.eqmid,
+                                          u->ldac_info.channel_mode, u->ldac_info.pcm_fmt, u->ldac_info.pcm_frequency);
+                if(ret != 0)
+                    pa_log_warn("Failed to init ldacBT handle");
+                a2dp_set_sink(u);
+            }
+        }
+
         update_buffer_size(u);
     }
 
@@ -1308,7 +1514,7 @@ static void transport_config(struct userdata *u) {
         u->sample_spec.format = PA_SAMPLE_S16LE;
         u->sample_spec.channels = 1;
         u->sample_spec.rate = 8000;
-    } else if(u->transport->codec == A2DP_CODEC_SBC) {
+    } else if(u->transport && u->transport->codec == A2DP_CODEC_SBC) {
         sbc_info_t *sbc_info = &u->sbc_info;
         a2dp_sbc_t *config;
 
@@ -1416,7 +1622,7 @@ static void transport_config(struct userdata *u) {
                     sbc_info->sbc.allocation, sbc_info->sbc.subbands ? 8 : 4, sbc_info->sbc.blocks, sbc_info->sbc.bitpool);
     }
 #ifdef ENABLE_LDAC
-    else if (u->transport->codec == A2DP_CODEC_VENDOR){
+    else if (u->transport && u->transport->codec == A2DP_CODEC_VENDOR){
         a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
         if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
             a2dp_ldac_t * config = (a2dp_ldac_t *) vendor_codec;
@@ -1424,24 +1630,25 @@ static void transport_config(struct userdata *u) {
             pa_assert(u->transport);
 
             u->sample_spec.format = PA_SAMPLE_S16LE;
-
-
-
+            ldac_info_t * ldac_info = &u->ldac_info;
+            ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S16;
+            ldac_info->eqmid = LDACBT_EQMID_HQ;
+            ldac_info->hLdacBt = NULL;
             switch (config->frequency) {
                 case LDACBT_SAMPLING_FREQ_044100:
-
+                    ldac_info->pcm_frequency = 44100u;
                     u->sample_spec.rate = 44100U;
                     break;
                 case LDACBT_SAMPLING_FREQ_048000:
-
+                    ldac_info->pcm_frequency = 48000u;
                     u->sample_spec.rate = 48000U;
                     break;
                 case LDACBT_SAMPLING_FREQ_088200:
-
+                    ldac_info->pcm_frequency = 88200u;
                     u->sample_spec.rate = 88200U;
                     break;
                 case LDACBT_SAMPLING_FREQ_096000:
-
+                    ldac_info->pcm_frequency = 96000u;
                     u->sample_spec.rate = 96000U;
                     break;
                 default:
@@ -1450,15 +1657,15 @@ static void transport_config(struct userdata *u) {
 
             switch (config->channel_mode) {
                 case LDACBT_CHANNEL_MODE_MONO:
-
+                    ldac_info->channel_mode = LDACBT_CHANNEL_MODE_MONO;
                     u->sample_spec.channels = 1;
                     break;
                 case LDACBT_CHANNEL_MODE_DUAL_CHANNEL:
-
+                    ldac_info->channel_mode = LDACBT_CHANNEL_MODE_DUAL_CHANNEL;
                     u->sample_spec.channels = 2;
                     break;
                 case LDACBT_CHANNEL_MODE_STEREO:
-
+                    ldac_info->channel_mode = LDACBT_CHANNEL_MODE_STEREO;
                     u->sample_spec.channels = 2;
                     break;
 
@@ -1541,13 +1748,20 @@ static int init_profile(struct userdata *u) {
 }
 
 static int write_block(struct userdata *u) {
-    int n_written;
+    int n_written = -1;
 
     if (u->write_index <= 0)
         u->started_at = pa_rtclock_now();
 
     if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-        if ((n_written = a2dp_process_render(u)) < 0)
+        if(u->transport->codec == A2DP_CODEC_SBC)
+            n_written = a2dp_process_render(u);
+        else if (u->transport->codec == A2DP_CODEC_VENDOR) {
+            a2dp_vendor_codec_t *vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
+            if (vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID)
+                n_written = ldac_process_render(u);
+        }
+        if ((n_written) < 0)
             return -1;
     } else {
         if ((n_written = sco_process_render(u)) < 0)
@@ -1720,7 +1934,7 @@ static void thread_func(void *userdata) {
                                 skip_bytes -= bytes_to_render;
                             }
 
-                            if (u->write_index > 0 && u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK)
+                            if (u->write_index > 0 && u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK && u->transport->codec == A2DP_CODEC_SBC)
                                 a2dp_reduce_bitpool(u);
                         }
 
@@ -2109,7 +2323,7 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         cp->available = transport_state_to_availability(u->device->transports[*p]->state);
     else
         cp->available = PA_AVAILABLE_NO;
-
+    pa_log_debug("set cp->available u->device->transports[*p]?%c",u->device->transports[*p]?'y':'n');
     return cp;
 }
 
@@ -2566,6 +2780,12 @@ void pa__done(pa_module *m) {
 
     if (u->sbc_info.sbc_initialized)
         sbc_finish(&u->sbc_info.sbc);
+
+    if (u->ldac_info.buffer)
+        pa_xfree(u->ldac_info.buffer);
+
+    if (u->ldac_info.hLdacBt)
+        ldacBT_free_handle(u->ldac_info.hLdacBt);
 
     if (u->msg)
         pa_xfree(u->msg);

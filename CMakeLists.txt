@@ -1,18 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(pulseaudio_modules_bt C)
 
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-12.0/modules)
-add_definitions(-DHAVE_CONFIG_H)
-#add_definitions(-DENABLE_LDAC)
-
-
-find_package(PkgConfig REQUIRED)
-find_package(PulseAudio REQUIRED)
-pkg_check_modules(DBUS REQUIRED "dbus-1")
-pkg_check_modules(SBC REQUIRED "sbc")
-
 include_directories(.)
 include_directories(pa/src)
 include_directories(libldac/inc)
@@ -21,8 +9,22 @@ include_directories(${DBUS_INCLUDE_DIRS})
 include_directories(${SBC_INCLUDE_DIRS})
 link_directories(/usr/lib/pulseaudio)
 
-set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-12.0 pulsecore-12.0)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-${PulseAudio_VERSION}/modules)
+add_definitions(-DHAVE_CONFIG_H)
+add_definitions(-DENABLE_LDAC)
 
+
+
+find_package(PkgConfig REQUIRED)
+find_package(PulseAudio  REQUIRED)
+pkg_check_modules(DBUS REQUIRED "dbus-1")
+pkg_check_modules(SBC REQUIRED "sbc")
+
+configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
+
+set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
 
 add_library(ldacBT_enc
         libldac/src/ldaclib.c
@@ -66,5 +68,5 @@ SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
 
 
-INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util
-        LIBRARY DESTINATION /usr/lib/pulse-12.0/modules/)
+INSTALL(TARGETS module-bluez5-device  bluez5-util
+        LIBRARY DESTINATION /usr/lib/pulse-${PulseAudio_VERSION}/modules/)

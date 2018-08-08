@@ -35,13 +35,13 @@ PA_MODULE_DESCRIPTION("Detect available BlueZ 5 Bluetooth audio devices and load
 PA_MODULE_VERSION(PACKAGE_VERSION);
 PA_MODULE_LOAD_ONCE(true);
 PA_MODULE_USAGE(
-    "headset=ofono|native|auto"
+        "headset=ofono|native|auto"
 );
 
 static const char* const valid_modargs[] = {
-    "headset",
-    "autodetect_mtu",
-    NULL
+        "headset",
+        "autodetect_mtu",
+        NULL
 };
 
 struct userdata {
@@ -138,13 +138,13 @@ int pa__init(pa_module *m) {
         goto fail;
 
     u->device_connection_changed_slot =
-        pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_DEVICE_CONNECTION_CHANGED),
-                        PA_HOOK_NORMAL, (pa_hook_cb_t) device_connection_changed_cb, u);
+            pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_DEVICE_CONNECTION_CHANGED),
+                            PA_HOOK_NORMAL, (pa_hook_cb_t) device_connection_changed_cb, u);
 
     pa_modargs_free(ma);
     return 0;
 
-fail:
+    fail:
     if (ma)
         pa_modargs_free(ma);
     pa__done(m);

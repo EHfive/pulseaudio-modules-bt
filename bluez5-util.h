@@ -37,7 +37,7 @@
 #define PA_BLUETOOTH_UUID_HFP_AG      "0000111f-0000-1000-8000-00805f9b34fb"
 
 //endpoint b belong endpoint a
-#define endpoint_belong(a,b) (!strncmp((a),(b),sizeof(a)-1))
+#define endpoint_belong(a,b) (!strncmp((a),(b),strlen(a)))
 
 
 typedef struct pa_bluetooth_transport pa_bluetooth_transport;

@@ -27,7 +27,7 @@ install
     cd ..
     mkdir build
     cd build
-    cmake -DCMAKE_INSTALL_PREFIX=/usr ..
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..
     make
     make install
 

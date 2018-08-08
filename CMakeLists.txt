@@ -10,6 +10,15 @@ link_directories(/usr/lib/pulseaudio)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-${PulseAudio_VERSION}/modules)
+
+SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g -ggdb")
+SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
+
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_definitions(-DNDEBUG)
+endif (CMAKE_BUILD_TYPE STREQUAL "Release")
+
+
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-DENABLE_LDAC)
 

@@ -741,10 +741,7 @@ static int ldac_process_render(struct userdata *u) {
         int encoded;
         int ldac_frame_num;
         int ret_code;
-//        encoded = sbc_encode(&sbc_info->sbc,
-//                             p, to_encode,
-//                             d, to_write,
-//                             &written);
+
         ret_code = ldacBT_encode(u->ldac_info.hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
 
         if (PA_UNLIKELY(ret_code < 0)) {
@@ -752,8 +749,8 @@ static int ldac_process_render(struct userdata *u) {
             int err = ldacBT_get_error_code(u->ldac_info.hLdacBt);
             pa_log_error("LDACBT_API_ERR:%d  LDACBT_HANDLE_ERR:%d  LDACBT_BLOCK_ERR:%d",LDACBT_API_ERR(err),LDACBT_HANDLE_ERR(err),LDACBT_BLOCK_ERR(err));
 
-//            pa_memblock_release(u->write_memchunk.memblock);
-//            return -1;
+            pa_memblock_release(u->write_memchunk.memblock);
+            return -1;
         }
 
         pa_assert_fp((size_t) encoded <= to_encode);

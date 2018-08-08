@@ -5,8 +5,6 @@ include_directories(.)
 include_directories(pa/src)
 include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
-include_directories(${DBUS_INCLUDE_DIRS})
-include_directories(${SBC_INCLUDE_DIRS})
 link_directories(/usr/lib/pulseaudio)
 
 set(CMAKE_C_STANDARD 99)
@@ -21,6 +19,9 @@ find_package(PkgConfig REQUIRED)
 find_package(PulseAudio  REQUIRED)
 pkg_check_modules(DBUS REQUIRED "dbus-1")
 pkg_check_modules(SBC REQUIRED "sbc")
+
+include_directories(${DBUS_INCLUDE_DIRS})
+include_directories(${SBC_INCLUDE_DIRS})
 
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
 
@@ -69,4 +70,4 @@ SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
 
 INSTALL(TARGETS module-bluez5-device  bluez5-util
-        LIBRARY DESTINATION /usr/lib/pulse-${PulseAudio_VERSION}/modules/)
+        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules/)

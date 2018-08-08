@@ -38,9 +38,9 @@ run
     #if pulseaudio not restart automatically run
     pulseaudio --start
 
-then connect your bt headphone and swith audio profile to 'A2DP Sink'
+then connect your bt headphone and switch audio profile to 'A2DP Sink'
 
-if there is only profile 'HSP/HFP' anf 'off', disconnect and reconncet headphone
+if there is only profile 'HSP/HFP' and 'off', disconnect and reconncet headphone
 
 
 ## TODO

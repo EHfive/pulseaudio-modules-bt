@@ -20,6 +20,11 @@ install
 
     git clone https://github.com/EHfive/pulseaudio-modules-bt.git
     cd pulseaudio-modules-bt
+    git submodule update
+    cd pa
+    git checkout vxx.x # v12.2, v11.1, etc. pulseaudio version
+
+    cd ..
     mkdir build
     cd build
     cmake -DCMAKE_INSTALL_PREFIX=/usr ..

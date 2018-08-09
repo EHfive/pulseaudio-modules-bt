@@ -5,11 +5,11 @@ include_directories(.)
 include_directories(pa/src)
 include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
-link_directories(/usr/lib/pulseaudio)
+link_directories(${CMAKE_INSTALL_PREFIX}/lib/pulseaudio)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INSTALL_RPATH /usr/lib/pulseaudio:/usr/lib/pulse-${PulseAudio_VERSION}/modules)
+set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
 
 SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g -ggdb")
 SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
@@ -75,8 +75,27 @@ target_compile_definitions(module-bluez5-device PUBLIC PA_MODULE_NAME=module_blu
 target_link_libraries(module-bluez5-device ldacBT_enc bluez5-util ${SBC_LIBRARIES} ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
+add_library(module-bluetooth-discover SHARED
+        config.h
+        ${PROJECT_SOURCE_DIR}/pa/src/pulsecore/module.h
+        ${PROJECT_SOURCE_DIR}/pa/src/modules/bluetooth/module-bluetooth-discover.c
+        )
+
+target_compile_definitions(module-bluetooth-discover PUBLIC PA_MODULE_NAME=module_bluetooth_discover)
+target_link_libraries(module-bluetooth-discover  ${MOD_LIBS})
+SET_TARGET_PROPERTIES(module-bluetooth-discover PROPERTIES PREFIX "")
+
+add_library(module-bluetooth-policy SHARED
+        config.h
+        ${PROJECT_SOURCE_DIR}/pa/src/pulsecore/module.h
+        ${PROJECT_SOURCE_DIR}/pa/src/modules/bluetooth/module-bluetooth-policy.c
+        )
+
+target_compile_definitions(module-bluetooth-policy PUBLIC PA_MODULE_NAME=module_bluetooth_policy)
+target_link_libraries(module-bluetooth-policy  ${MOD_LIBS})
+SET_TARGET_PROPERTIES(module-bluetooth-policy PROPERTIES PREFIX "")
 
 
 
-INSTALL(TARGETS module-bluez5-device  bluez5-util
+INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util module-bluetooth-policy module-bluetooth-discover
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules/)

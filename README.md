@@ -9,6 +9,19 @@ so you can playing audio with ldac codec
 use bluetooth headphones (support ldac decoding)
 
 ## Usage
+#### Arch Linux
+
+install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packages/pulseaudio-modules-bt-git/)<sup>AUR</sup>
+
+#### General Install
+
+**requirements**
+
+* pulseaudio,libpulse~=12.0
+* bluez,bluez-libs~=5.0
+* sbc
+* cmake
+
 **backup original pulseaudio bt modules**
 
     cd /usr/lib/pulse-xx.x/modules
@@ -32,7 +45,7 @@ use bluetooth headphones (support ldac decoding)
     make
     make install
 
-**load it**
+#### Load Modules
 
     pulseaudio -k
 
@@ -42,7 +55,7 @@ use bluetooth headphones (support ldac decoding)
 
 then connect your bt headphone and switch audio profile to 'A2DP Sink'
 
-if there is only profile 'HSP/HFP' and 'off', disconnect and reconncet headphone
+if there is only profile 'HSP/HFP' and 'off', disconnect and reconnect headphone
 
 > [" When the device connects automatically (by powering on after being paired) A2DP is 'unavailable' "   -----Issue: cannot select a2dp profile](https://gitlab.freedesktop.org/pulseaudio/pulseaudio/issues/525)
 

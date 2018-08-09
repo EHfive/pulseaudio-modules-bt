@@ -7,15 +7,12 @@ include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
 link_directories(${CMAKE_INSTALL_PREFIX}/lib/pulseaudio)
 
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g -ggdb")
-SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
+SET(CMAKE_C_FLAGS_DEBUG "$ENV{CFLAGS} -O2 -Wall -g -DNDEBUG")
+SET(CMAKE_C_FLAGS_RELEASE "$ENV{CFLAGS} -O2 -g -Wall -DNDEBUG")
 
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_definitions(-DNDEBUG)
-endif (CMAKE_BUILD_TYPE STREQUAL "Release")
 
 
 add_definitions(-DHAVE_CONFIG_H)
@@ -95,7 +92,7 @@ target_compile_definitions(module-bluetooth-policy PUBLIC PA_MODULE_NAME=module_
 target_link_libraries(module-bluetooth-policy  ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluetooth-policy PROPERTIES PREFIX "")
 
-
+message(STATUS "CMAKE_C_FLAGS = " ${CMAKE_C_FLAGS_RELEASE})
 
 INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util module-bluetooth-policy module-bluetooth-discover
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules/)

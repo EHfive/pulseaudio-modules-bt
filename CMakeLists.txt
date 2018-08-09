@@ -9,7 +9,6 @@ link_directories(${CMAKE_INSTALL_PREFIX}/lib/pulseaudio)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
 
 SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g -ggdb")
 SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
@@ -35,6 +34,7 @@ include_directories(${SBC_INCLUDE_DIRS})
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
 
 set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
+set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
 
 add_library(ldacBT_enc
         libldac/src/ldaclib.c

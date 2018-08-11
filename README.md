@@ -63,7 +63,7 @@ as an alternative, you can fix it with this [udev script](https://gist.github.co
 
 ## TODO
 
-add ldac abr (Adaptive Bit Rate) supprot
+~~add ldac abr (Adaptive Bit Rate) supprot~~
 
 support ACC, APTX , APTX HD Codec using ffmpeg
 

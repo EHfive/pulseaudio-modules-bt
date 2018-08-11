@@ -36,6 +36,7 @@ set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_P
 add_library(ldacBT_enc
         libldac/src/ldaclib.c
         libldac/src/ldacBT.c
+        libldac/abr/src/ldacBT_abr.c
         )
 
 target_link_libraries(ldacBT_enc m)

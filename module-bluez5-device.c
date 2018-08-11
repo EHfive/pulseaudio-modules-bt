@@ -47,6 +47,7 @@
 
 #include "a2dp-codecs.h"
 #include "ldacBT.h"
+#include "ldacBT_abr.h"
 #include "bluez5-util.h"
 #include "rtp.h"
 
@@ -66,6 +67,10 @@ PA_MODULE_USAGE("path=<device object path>"
 #define BITPOOL_DEC_STEP 5
 #define HSP_MAX_GAIN 15
 #define AVDT_MEDIA_HDR_SIZE 12
+
+#define LDAC_ABR_THRESHOLD_CRITICAL 4
+#define LDAC_ABR_THRESHOLD_DANGEROUSTREND 3
+#define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 3
 
 static const char* const valid_modargs[] = {
     "path",
@@ -109,10 +114,16 @@ typedef struct sbc_info {
 
 typedef struct ldac_info {
     HANDLE_LDAC_BT hLdacBt;
+    HANDLE_LDAC_ABR hLdacAbr;
     uint8_t eqmid;
     uint8_t channel_mode;
     LDACBT_SMPL_FMT_T pcm_fmt;
     int pcm_frequency;
+    int ldac_frame_size;
+    int pcm_read_size;
+    int pcm_lsu;
+    int pcm_bytes;
+    int pcm_channel;
     uint16_t seq_num;
     void * buffer;
     size_t buffer_size;
@@ -1062,9 +1073,14 @@ static void transport_config_mtu(struct userdata *u) {
                 lsu = 128;
                 pa_log_error("Unknown pcm frequency:%d",pcm_frequency);
             }
+            u->ldac_info.ldac_frame_size = pkg_size;
+            u->ldac_info.pcm_lsu = lsu;
+            u->ldac_info.pcm_bytes = bits;
+            u->ldac_info.pcm_channel = channel;
+            u->ldac_info.pcm_read_size = (lsu * bits * channel);
             u->write_block_size =
                     (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-                    /pkg_size * (lsu * bits * channel);
+                    /pkg_size * u->ldac_info.pcm_read_size;
                     // /330 * 512;
             pa_log_debug("LDAC transport write_block_size=%d pkg_size=%d lsu=%d bits/sample=%d channel=%d",
                          (int) u->write_block_size,pkg_size,lsu,bits,channel);
@@ -1122,10 +1138,25 @@ static void setup_stream(struct userdata *u) {
                     ldacBT_free_handle(u->ldac_info.hLdacBt);
                 }
                 u->ldac_info.hLdacBt = ldacBT_get_handle();
-                ret = ldacBT_init_handle_encode(u->ldac_info.hLdacBt, (int) u->write_link_mtu + AVDT_MEDIA_HDR_SIZE, u->ldac_info.eqmid,
-                                          u->ldac_info.channel_mode, u->ldac_info.pcm_fmt, u->ldac_info.pcm_frequency);
+
+                if(u->ldac_info.hLdacAbr)
+                    ldac_ABR_free_handle(u->ldac_info.hLdacAbr);
+                u->ldac_info.hLdacAbr = ldac_ABR_get_handle();
+
+                ret = ldacBT_init_handle_encode(u->ldac_info.hLdacBt, (int) u->write_link_mtu + AVDT_MEDIA_HDR_SIZE,
+                                                u->ldac_info.eqmid,
+                                                u->ldac_info.channel_mode, u->ldac_info.pcm_fmt,
+                                                u->ldac_info.pcm_frequency);
                 if(ret != 0)
                     pa_log_warn("Failed to init ldacBT handle");
+
+                ldac_ABR_Init(u->ldac_info.hLdacAbr,
+                              (unsigned int) pa_bytes_to_usec(u->write_block_size, &u->sample_spec) / 1000);
+                ldac_ABR_set_thresholds(u->ldac_info.hLdacAbr, LDAC_ABR_THRESHOLD_CRITICAL,
+                                        LDAC_ABR_THRESHOLD_DANGEROUSTREND, LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ);
+                if(ret != 0)
+                    pa_log_warn("Failed to init ldacBT_ABR handle");
+
                 a2dp_set_sink(u);
                 u->process_render = ldac_process_render;
             }
@@ -1775,7 +1806,7 @@ static void thread_func(void *userdata) {
     struct userdata *u = userdata;
     unsigned blocks_to_write = 0;
     unsigned bytes_to_write = 0;
-
+    int min_skip_blocks = 2;
     pa_assert(u);
     pa_assert(u->transport);
 
@@ -1789,7 +1820,9 @@ static void thread_func(void *userdata) {
     /* Setup the stream only if the transport was already acquired */
     if (u->transport_acquired)
         setup_stream(u);
-
+    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr){
+        min_skip_blocks = (LDAC_ABR_THRESHOLD_CRITICAL-1) * u->ldac_info.ldac_frame_size / u->ldac_info.pcm_read_size;
+    }
     for (;;) {
         struct pollfd *pollfd;
         int ret;
@@ -1896,22 +1929,29 @@ static void thread_func(void *userdata) {
                         time_passed = pa_rtclock_now() - u->started_at;
                         audio_sent = pa_bytes_to_usec(u->write_index, &u->sample_spec);
                     }
+                    size_t bytes_to_send =(time_passed > audio_sent)? pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec):0;
+
+                    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr)
+                        ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
+                                      (bytes_to_send * u->ldac_info.pcm_read_size) / (u->write_block_size *
+                                                                                      u->ldac_info.ldac_frame_size)*2,
+                                      true);
+
 
                     /* A new block needs to be sent. */
                     if (audio_sent <= time_passed) {
-                        size_t bytes_to_send = pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec);
 
                         /* There are more than two blocks that need to be written. It seems that
                          * the socket has not been accepting data fast enough (could be due to
                          * hiccups in the wireless transmission). We need to discard everything
-                         * older than two block sizes to keep the latency from growing. */
-                        if (bytes_to_send > 2 * u->write_block_size) {
+                         * older than two block sizes (or more) to keep the latency from growing. */
+                        if (bytes_to_send > min_skip_blocks * u->write_block_size) {
                             uint64_t skip_bytes;
                             pa_memchunk tmp;
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = bytes_to_send - 2 * u->write_block_size;
+                            skip_bytes = bytes_to_send - min_skip_blocks * u->write_block_size;
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",
@@ -2784,6 +2824,9 @@ void pa__done(pa_module *m) {
 
     if (u->ldac_info.hLdacBt)
         ldacBT_free_handle(u->ldac_info.hLdacBt);
+
+    if (u->ldac_info.hLdacAbr)
+        ldac_ABR_free_handle(u->ldac_info.hLdacAbr);
 
     if (u->msg)
         pa_xfree(u->msg);

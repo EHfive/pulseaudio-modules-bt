@@ -931,7 +931,7 @@ static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const
 
         }
 #ifdef ENABLE_LDAC
-            else if(endpoint_belong(A2DP_LDAC_SRC_ENDPOINT,endpoint)){
+        else if(endpoint_belong(A2DP_LDAC_SRC_ENDPOINT,endpoint)){
             codec = A2DP_CODEC_VENDOR;
             a2dp_ldac_t capabilities;
             capabilities_size = sizeof(a2dp_ldac_t);
@@ -943,6 +943,7 @@ static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const
                                      LDACBT_SAMPLING_FREQ_088200 | LDACBT_SAMPLING_FREQ_096000;
             capabilities.channel_mode = LDACBT_CHANNEL_MODE_MONO | LDACBT_CHANNEL_MODE_DUAL_CHANNEL |
                                         LDACBT_CHANNEL_MODE_STEREO;
+            pa_log_debug("codec 0x%x,capabilities_size %d",codec,(int) capabilities_size);
 
         }
 #endif
@@ -1358,6 +1359,30 @@ const char *pa_bluetooth_profile_to_string(pa_bluetooth_profile_t profile) {
     }
 
     return NULL;
+}
+const char *pa_bluetooth_transport_to_string(pa_bluetooth_transport *t) {
+
+    if(!t)
+        return NULL;
+    if (t->codec == A2DP_CODEC_SBC) {
+        return "SBC";
+    } else if (t->codec == A2DP_CODEC_MPEG24){
+        return "AAC";
+    } else if (t->codec == A2DP_CODEC_VENDOR){
+        if(!t->config)
+            return NULL;
+        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) t->config;
+        if(vendor_codec->vendor_id == LDAC_VENDOR_ID && vendor_codec->codec_id == LDAC_CODEC_ID){
+            return "LDAC";
+        } else if (vendor_codec->vendor_id == APTX_VENDOR_ID && vendor_codec->codec_id == APTX_CODEC_ID){
+            return "APTX";
+        } else if (vendor_codec->vendor_id == APTX_HD_VENDOR_ID && vendor_codec->codec_id == APTX_HD_CODEC_ID){
+            return "APTX HD";
+        } else{
+            return "Unknown Vendor Codec";
+        }
+    }
+    return "Unknown Codec";
 }
 
 static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage *m, void *userdata) {

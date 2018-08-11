@@ -10,19 +10,15 @@ link_directories(${CMAKE_INSTALL_PREFIX}/lib/pulseaudio)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_C_FLAGS "")
+set(CMAKE_C_FLAGS " -pipe -fstack-protector-strong -O2 -Wall -fno-plt  -ffast-math -fno-common ")
 set(CMAKE_EXE_LINKER_FLAGS "")
 set(CMAKE_MODULE_LINKER_FLAGS "")
 set(CMAKE_SHARED_LINKER_FLAGS "")
-SET(CMAKE_C_FLAGS_DEBUG "$ENV{CFLAGS} -O2 -Wall -g -DNDEBUG")
-SET(CMAKE_C_FLAGS_RELEASE "$ENV{CFLAGS} -O2 -g -Wall -DNDEBUG")
 
-
-add_definitions(-DNDEBUG)
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-DENABLE_LDAC)
 
-
+add_definitions(-D_REENTRANT)
 
 find_package(PkgConfig REQUIRED)
 find_package(PulseAudio  REQUIRED)

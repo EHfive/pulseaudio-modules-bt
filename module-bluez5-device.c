@@ -149,6 +149,7 @@ struct userdata {
 
     int stream_fd;
     int stream_write_type;
+    int (*process_render)(struct userdata *);
     size_t read_link_mtu;
     size_t write_link_mtu;
     size_t read_block_size;
@@ -432,24 +433,27 @@ static void a2dp_prepare_buffer(struct userdata *u) {
 
     pa_assert(u);
 
-    if(u->transport->codec == A2DP_CODEC_SBC){
-        if (u->sbc_info.buffer_size >= min_buffer_size)
-            return;
+    if (u->sbc_info.buffer_size >= min_buffer_size)
+        return;
 
-        u->sbc_info.buffer_size = 2 * min_buffer_size;
-        pa_xfree(u->sbc_info.buffer);
-        u->sbc_info.buffer = pa_xmalloc(u->sbc_info.buffer_size);
-    }else if (u->transport->codec == A2DP_CODEC_VENDOR){
-        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
-        if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
-            if (u->ldac_info.buffer_size >= min_buffer_size)
-                return;
+    u->sbc_info.buffer_size = 2 * min_buffer_size;
+    pa_xfree(u->sbc_info.buffer);
+    u->sbc_info.buffer = pa_xmalloc(u->sbc_info.buffer_size);
 
-            u->ldac_info.buffer_size = 2 * min_buffer_size;
-            pa_xfree(u->ldac_info.buffer);
-            u->ldac_info.buffer = pa_xmalloc(u->ldac_info.buffer_size);
-        }
-    }
+}
+
+static void a2dp_prepare_buffer_ldac(struct userdata *u) {
+    size_t min_buffer_size = PA_MAX(u->read_link_mtu, u->write_link_mtu);
+
+    pa_assert(u);
+
+    if (u->ldac_info.buffer_size >= min_buffer_size)
+        return;
+
+    u->ldac_info.buffer_size = 2 * min_buffer_size;
+    pa_xfree(u->ldac_info.buffer);
+    u->ldac_info.buffer = pa_xmalloc(u->ldac_info.buffer_size);
+
 }
 
 /* Run from IO thread */
@@ -468,7 +472,7 @@ static int a2dp_process_render(struct userdata *u) {
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
     pa_assert(u->sink);
 
-    /* First, render some data */
+    /* First, process_render some data */
     if (!u->write_memchunk.memblock)
         pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
 
@@ -714,13 +718,13 @@ static int ldac_process_render(struct userdata *u) {
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
     pa_assert(u->sink);
 
-    /* First, render some data */
+    /* First, process_render some data */
     if (!u->write_memchunk.memblock)
         pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
 
     pa_assert(u->write_memchunk.length == u->write_block_size);
 
-    a2dp_prepare_buffer(u);
+    a2dp_prepare_buffer_ldac(u);
 
     ldac_info = &u->ldac_info;
     header = ldac_info->buffer;
@@ -1106,8 +1110,10 @@ static void setup_stream(struct userdata *u) {
     pa_log_debug("Stream properly set up, we're ready to roll!");
 
     if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-        if(u->transport->codec == A2DP_CODEC_SBC)
+        if(u->transport->codec == A2DP_CODEC_SBC){
             a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
+            u->process_render = a2dp_process_render;
+        }
         else if(u->transport->codec == A2DP_CODEC_VENDOR){
             int ret;
             a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
@@ -1121,6 +1127,7 @@ static void setup_stream(struct userdata *u) {
                 if(ret != 0)
                     pa_log_warn("Failed to init ldacBT handle");
                 a2dp_set_sink(u);
+                u->process_render = ldac_process_render;
             }
         }
 
@@ -1751,13 +1758,7 @@ static int write_block(struct userdata *u) {
         u->started_at = pa_rtclock_now();
 
     if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-        if(u->transport->codec == A2DP_CODEC_SBC)
-            n_written = a2dp_process_render(u);
-        else if (u->transport->codec == A2DP_CODEC_VENDOR) {
-            a2dp_vendor_codec_t *vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
-            if (vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID)
-                n_written = ldac_process_render(u);
-        }
+            n_written = u->process_render(u);
         if ((n_written) < 0)
             return -1;
     } else {

@@ -70,7 +70,7 @@ PA_MODULE_USAGE("path=<device object path>"
 
 #define LDAC_ABR_THRESHOLD_CRITICAL 4
 #define LDAC_ABR_THRESHOLD_DANGEROUSTREND 3
-#define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 3
+#define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
 
 static const char* const valid_modargs[] = {
     "path",
@@ -1933,8 +1933,8 @@ static void thread_func(void *userdata) {
 
                     if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr)
                         ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
-                                      (bytes_to_send * u->ldac_info.pcm_read_size) / (u->write_block_size *
-                                                                                      u->ldac_info.ldac_frame_size)*2,
+                                      (bytes_to_send * u->ldac_info.pcm_read_size * 2) / (u->write_block_size *
+                                                                                      u->ldac_info.ldac_frame_size),
                                       true);
 
 

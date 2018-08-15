@@ -15,6 +15,8 @@ set(CMAKE_EXE_LINKER_FLAGS "")
 set(CMAKE_MODULE_LINKER_FLAGS "")
 set(CMAKE_SHARED_LINKER_FLAGS "")
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-DENABLE_LDAC)
 

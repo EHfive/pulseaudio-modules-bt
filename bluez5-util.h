@@ -21,6 +21,7 @@
 ***/
 
 #include <pulsecore/core.h>
+#include <pulsecore/dbus-shared.h>
 #include <sys/socket.h>
 #define PA_BLUETOOTH_UUID_A2DP_SOURCE "0000110a-0000-1000-8000-00805f9b34fb"
 #define PA_BLUETOOTH_UUID_A2DP_SINK   "0000110b-0000-1000-8000-00805f9b34fb"
@@ -129,6 +130,26 @@ struct pa_bluetooth_adapter {
     bool valid;
 };
 
+struct pa_bluetooth_discovery {
+    PA_REFCNT_DECLARE;
+
+    pa_core *core;
+    pa_dbus_connection *connection;
+    bool filter_added;
+    bool matches_added;
+    bool objects_listed;
+    pa_hook hooks[PA_BLUETOOTH_HOOK_MAX];
+    pa_hashmap *adapters;
+    pa_hashmap *devices;
+    pa_hashmap *transports;
+    bool use_ldac;
+    int ldac_eqmid;
+
+    int headset_backend;
+    pa_bluetooth_backend *ofono_backend, *native_backend;
+    PA_LLIST_HEAD(pa_dbus_pending, pending);
+};
+
 #ifdef HAVE_BLUEZ_5_OFONO_HEADSET
 pa_bluetooth_backend *pa_bluetooth_ofono_backend_new(pa_core *c, pa_bluetooth_discovery *y);
 void pa_bluetooth_ofono_backend_free(pa_bluetooth_backend *b);
@@ -177,7 +198,7 @@ static inline bool pa_bluetooth_uuid_is_hsp_hs(const char *uuid) {
 #define HEADSET_BACKEND_NATIVE 1
 #define HEADSET_BACKEND_AUTO 2
 
-pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *core, int headset_backend);
+pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backend, bool use_ldac, int ldac_eqmid);
 pa_bluetooth_discovery* pa_bluetooth_discovery_ref(pa_bluetooth_discovery *y);
 void pa_bluetooth_discovery_unref(pa_bluetooth_discovery *y);
 void pa_bluetooth_discovery_set_ofono_running(pa_bluetooth_discovery *y, bool is_running);

@@ -61,6 +61,40 @@ if there is only profile 'HSP/HFP' and 'off', disconnect and reconnect headphone
 
 as an alternative, you can fix it with this [udev script](https://gist.github.com/EHfive/c4f1218a75f95b076f0387403246de78)
 
+#### Module Aruguments
+
+**module-bluez5-discover**
+
+|Key| Value|Desc |Default|
+|---|---|---|---|
+|ldac|\<boolean\>|enable/disable LDAC codec|true|
+|ldac_eqmid|hq|LDAC High Quality|auto|
+||sq|LDAC Standard Quality|
+||mq|LDAC Mobile use Quality|
+||auto /abr|LDAC Adaptive Bit Rate|
+
+#### config
+
+edit /etc/pulse/deamon.conf
+
+append arguments to 'load-module module-bluetooth-discover'
+
+(module-bluetooth-discover pass all arguments to module-bluez5-discover)
+
+    # LDAC Standard Quality
+    load-module module-bluetooth-discover ldac_eqmid=sq
+
+    # disable LDAC Codec support
+    load-module module-bluetooth-discover ldac=false
+
+
+equivalent to commands below if you do not use 'module-bluetooth-discover'
+
+    load-module module-bluez5-discover ldac_eqmid=sq
+
+    load-module module-bluez5-discover ldac=false
+
+
 ## TODO
 
 ~~add ldac abr (Adaptive Bit Rate) supprot~~

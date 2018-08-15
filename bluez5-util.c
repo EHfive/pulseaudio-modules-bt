@@ -85,23 +85,7 @@
     " </interface>"                                                     \
     "</node>"
 
-struct pa_bluetooth_discovery {
-    PA_REFCNT_DECLARE;
 
-    pa_core *core;
-    pa_dbus_connection *connection;
-    bool filter_added;
-    bool matches_added;
-    bool objects_listed;
-    pa_hook hooks[PA_BLUETOOTH_HOOK_MAX];
-    pa_hashmap *adapters;
-    pa_hashmap *devices;
-    pa_hashmap *transports;
-
-    int headset_backend;
-    pa_bluetooth_backend *ofono_backend, *native_backend;
-    PA_LLIST_HEAD(pa_dbus_pending, pending);
-};
 
 static pa_dbus_pending* send_and_add_to_pending(pa_bluetooth_discovery *y, DBusMessage *m,
                                                 DBusPendingCallNotifyFunction func, void *call_data) {
@@ -1006,7 +990,8 @@ static void parse_interfaces_and_properties(pa_bluetooth_discovery *y, DBusMessa
                 return;
             // endpoint register first hava higher prority
 #ifdef ENABLE_LDAC
-            register_endpoint(y, path, A2DP_LDAC_SRC_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
+            if(y->use_ldac)
+                register_endpoint(y, path, A2DP_LDAC_SRC_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
 #endif
             register_endpoint(y, path, A2DP_SBC_SRC_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
 
@@ -1915,8 +1900,9 @@ static void endpoint_init(pa_bluetooth_discovery *y, pa_bluetooth_profile_t prof
             pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SBC_SRC_ENDPOINT,
                                                               &vtable_endpoint, y));
 #ifdef ENABLE_LDAC
-        pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_LDAC_SRC_ENDPOINT,
-                                                              &vtable_endpoint, y));
+            if(y->use_ldac)
+                pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_LDAC_SRC_ENDPOINT,
+                                                                  &vtable_endpoint, y));
 #endif
             break;
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
@@ -1936,7 +1922,8 @@ static void endpoint_done(pa_bluetooth_discovery *y, pa_bluetooth_profile_t prof
         case PA_BLUETOOTH_PROFILE_A2DP_SINK:
             dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SBC_SRC_ENDPOINT);
 #ifdef ENABLE_LDAC
-            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_LDAC_SRC_ENDPOINT);
+            if(y->use_ldac)
+                dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_LDAC_SRC_ENDPOINT);
 #endif
             break;
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
@@ -1948,7 +1935,7 @@ static void endpoint_done(pa_bluetooth_discovery *y, pa_bluetooth_profile_t prof
     }
 }
 
-pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backend) {
+pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backend, bool use_ldac, int ldac_eqmid) {
     pa_bluetooth_discovery *y;
     DBusError err;
     DBusConnection *conn;
@@ -1958,6 +1945,8 @@ pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backe
     PA_REFCNT_INIT(y);
     y->core = c;
     y->headset_backend = headset_backend;
+    y->use_ldac = use_ldac;
+    y->ldac_eqmid = ldac_eqmid;
     y->adapters = pa_hashmap_new_full(pa_idxset_string_hash_func, pa_idxset_string_compare_func, NULL,
                                       (pa_free_cb_t) adapter_free);
     y->devices = pa_hashmap_new_full(pa_idxset_string_hash_func, pa_idxset_string_compare_func, NULL,

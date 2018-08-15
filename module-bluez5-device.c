@@ -116,6 +116,7 @@ typedef struct ldac_info {
     HANDLE_LDAC_BT hLdacBt;
     HANDLE_LDAC_ABR hLdacAbr;
     uint8_t eqmid;
+    bool enable_abr;
     uint8_t channel_mode;
     LDACBT_SMPL_FMT_T pcm_fmt;
     int pcm_frequency;
@@ -1050,20 +1051,21 @@ static void transport_config_mtu(struct userdata *u) {
             int pcm_frequency = u->ldac_info.pcm_frequency;
             int bits = u->ldac_info.pcm_fmt;
             int channel = u->ldac_info.channel_mode == LDACBT_CHANNEL_MODE_MONO ? 1:2;
-            switch (u->ldac_info.eqmid){
-                case LDACBT_EQMID_HQ:
-                    pkg_size = 330;
-                    break;
-                case LDACBT_EQMID_SQ:
-                    pkg_size = 220;
-                    break;
-                case LDACBT_EQMID_MQ:
-                    pkg_size = 110;
-                    break;
-                default:
-                    u->ldac_info.eqmid = LDACBT_EQMID_SQ;
-                    pkg_size = 220;
-            }
+//            switch (u->ldac_info.eqmid){
+//                case LDACBT_EQMID_HQ:
+//                    pkg_size = 330;
+//                    break;
+//                case LDACBT_EQMID_SQ:
+//                    pkg_size = 220;
+//                    break;
+//                case LDACBT_EQMID_MQ:
+//                    pkg_size = 110;
+//                    break;
+//                default:
+//                    u->ldac_info.eqmid = LDACBT_EQMID_SQ;
+//                    pkg_size = 220;
+//            }
+            pkg_size = 330;
 
             if (pcm_frequency == 44100 || pcm_frequency == 48000)
                 lsu = 128;
@@ -1667,7 +1669,6 @@ static void transport_config(struct userdata *u) {
             u->sample_spec.format = PA_SAMPLE_S16LE;
             ldac_info_t * ldac_info = &u->ldac_info;
             ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S16;
-            ldac_info->eqmid = LDACBT_EQMID_HQ;
             ldac_info->hLdacBt = NULL;
             switch (config->frequency) {
                 case LDACBT_SAMPLING_FREQ_044100:
@@ -1706,6 +1707,14 @@ static void transport_config(struct userdata *u) {
 
                 default:
                     pa_assert_not_reached();
+            }
+
+            if(u->discovery->ldac_eqmid == LDACBT_EQMID_ABR){
+                ldac_info->eqmid = LDACBT_EQMID_HQ;
+                ldac_info->enable_abr = true;
+            } else {
+                ldac_info->eqmid = u->discovery->ldac_eqmid;
+                ldac_info->enable_abr = false;
             }
 
 
@@ -1931,11 +1940,11 @@ static void thread_func(void *userdata) {
                     }
                     size_t bytes_to_send =(time_passed > audio_sent)? pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec):0;
 
-                    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr)
+                    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr && u->ldac_info.enable_abr)
                         ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
                                       (bytes_to_send * u->ldac_info.pcm_read_size * 2) / (u->write_block_size *
                                                                                       u->ldac_info.ldac_frame_size),
-                                      true);
+                                      u->ldac_info.enable_abr);
 
 
                     /* A new block needs to be sent. */

@@ -13,7 +13,7 @@ use bluetooth headphones (support ldac decoding)
 
 install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packages/pulseaudio-modules-bt-git/)<sup>AUR</sup>
 
-#### General Install
+#### General Installation
 
 **requirements**
 
@@ -27,7 +27,7 @@ install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packag
     cd /usr/lib/pulse-xx.x/modules
     # xx.x is your current pulseaudio version
     cp module-bluez5-device.so module-bluez5-device.so.bak
-    cp libbluez5-util.so libbluez5-util.so.bak
+    cp libbluez5-util.so libbluez5-util.so.bak # ...
 
 **install**
 
@@ -65,5 +65,5 @@ as an alternative, you can fix it with this [udev script](https://gist.github.co
 
 ~~add ldac abr (Adaptive Bit Rate) supprot~~
 
-support ACC, APTX , APTX HD Codec using ffmpeg
+add AAC, APTX , APTX HD Codec support using ffmpeg
 

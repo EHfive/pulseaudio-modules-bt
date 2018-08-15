@@ -93,7 +93,7 @@ target_compile_definitions(module-bluetooth-policy PUBLIC PA_MODULE_NAME=module_
 target_link_libraries(module-bluetooth-policy  ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluetooth-policy PROPERTIES PREFIX "")
 
-message(STATUS "CMAKE_C_FLAGS = " ${CMAKE_C_FLAGS_RELEASE})
+message(STATUS "CMAKE_C_FLAGS = " ${CMAKE_C_FLAGS})
 
 INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util module-bluetooth-policy module-bluetooth-discover
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules/)

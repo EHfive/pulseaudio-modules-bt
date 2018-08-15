@@ -483,7 +483,7 @@ static int a2dp_process_render(struct userdata *u) {
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
     pa_assert(u->sink);
 
-    /* First, process_render some data */
+    /* First, render some data */
     if (!u->write_memchunk.memblock)
         pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
 
@@ -729,7 +729,7 @@ static int ldac_process_render(struct userdata *u) {
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
     pa_assert(u->sink);
 
-    /* First, process_render some data */
+    /* First, render some data */
     if (!u->write_memchunk.memblock)
         pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
 
@@ -1054,14 +1054,14 @@ static void transport_config_mtu(struct userdata *u) {
                 case LDACBT_EQMID_HQ:
                     pkg_size = 330;
                     break;
-                case LDACBT_EQMID_MQ:
+                case LDACBT_EQMID_SQ:
                     pkg_size = 220;
                     break;
-                case LDACBT_EQMID_SQ:
+                case LDACBT_EQMID_MQ:
                     pkg_size = 110;
                     break;
                 default:
-                    u->ldac_info.eqmid = LDACBT_EQMID_MQ;
+                    u->ldac_info.eqmid = LDACBT_EQMID_SQ;
                     pkg_size = 220;
             }
 
@@ -1945,13 +1945,15 @@ static void thread_func(void *userdata) {
                          * the socket has not been accepting data fast enough (could be due to
                          * hiccups in the wireless transmission). We need to discard everything
                          * older than two block sizes (or more) to keep the latency from growing. */
-                        if (bytes_to_send > min_skip_blocks * u->write_block_size) {
+                        size_t skip_size = min_skip_blocks * u->write_block_size;
+
+                        if (bytes_to_send > skip_size) {
                             uint64_t skip_bytes;
                             pa_memchunk tmp;
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = bytes_to_send - min_skip_blocks * u->write_block_size;
+                            skip_bytes = (bytes_to_send / skip_size) * skip_size;
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",

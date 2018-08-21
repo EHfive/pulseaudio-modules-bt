@@ -1053,22 +1053,9 @@ static void transport_config_mtu(struct userdata *u) {
         if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
             int pkg_size,lsu;
             int pcm_frequency = u->ldac_info.pcm_frequency;
-            int bytes = u->ldac_info.pcm_fmt;
+            int bytes = u->ldac_info.pcm_fmt == LDACBT_SMPL_FMT_F32 ? 4 : u->ldac_info.pcm_fmt;
             int channel = u->ldac_info.channel_mode == LDACBT_CHANNEL_MODE_MONO ? 1:2;
-//            switch (u->ldac_info.eqmid){
-//                case LDACBT_EQMID_HQ:
-//                    pkg_size = 330;
-//                    break;
-//                case LDACBT_EQMID_SQ:
-//                    pkg_size = 220;
-//                    break;
-//                case LDACBT_EQMID_MQ:
-//                    pkg_size = 110;
-//                    break;
-//                default:
-//                    u->ldac_info.eqmid = LDACBT_EQMID_SQ;
-//                    pkg_size = 220;
-//            }
+
             pkg_size = 330;
 
             if (pcm_frequency == 44100 || pcm_frequency == 48000)

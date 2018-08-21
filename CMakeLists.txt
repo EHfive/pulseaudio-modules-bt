@@ -35,7 +35,7 @@ configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/confi
 set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
 set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
 
-add_library(ldacBT_enc
+add_library(ldacBT_enc SHARED
         libldac/src/ldaclib.c
         libldac/src/ldacBT.c
         libldac/abr/src/ldacBT_abr.c
@@ -97,5 +97,5 @@ SET_TARGET_PROPERTIES(module-bluetooth-policy PROPERTIES PREFIX "")
 
 message(STATUS "CMAKE_C_FLAGS = " ${CMAKE_C_FLAGS})
 
-INSTALL(TARGETS module-bluez5-device module-bluez5-discover bluez5-util module-bluetooth-policy module-bluetooth-discover
+INSTALL(TARGETS ldacBT_enc module-bluez5-device module-bluez5-discover bluez5-util module-bluetooth-policy module-bluetooth-discover
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules/)

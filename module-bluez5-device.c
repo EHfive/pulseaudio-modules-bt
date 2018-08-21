@@ -126,6 +126,7 @@ typedef struct ldac_info {
     int pcm_bytes;
     int pcm_channel;
     uint16_t seq_num;
+    uint32_t layer_specific;
     void * buffer;
     size_t buffer_size;
 
@@ -782,6 +783,8 @@ static int ldac_process_render(struct userdata *u) {
         frame_count+=ldac_frame_num;
     }
 
+
+
     pa_memblock_release(u->write_memchunk.memblock);
 
     pa_assert(to_encode == 0);
@@ -795,9 +798,10 @@ static int ldac_process_render(struct userdata *u) {
     header->v = 2;
     header->pt = 1;
     header->sequence_number = htons(ldac_info->seq_num++);
-    header->timestamp = htonl(u->write_index / pa_frame_size(&u->sample_spec));
+    header->timestamp = htonl(ldac_info->layer_specific * ldac_info->pcm_lsu);
     header->ssrc = htonl(1);
     payload->frame_count = frame_count;
+    ldac_info->layer_specific += frame_count;
 
     nbytes = (uint8_t*) d - (uint8_t*) ldac_info->buffer;
     for (;;) {
@@ -888,7 +892,7 @@ static void a2dp_set_sink(struct userdata *u){
         pa_memchunk_reset(&u->write_memchunk);
     }
 
-    update_buffer_size(u);
+//    update_buffer_size(u);
 }
 /* Run from I/O thread */
 static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
@@ -1049,7 +1053,7 @@ static void transport_config_mtu(struct userdata *u) {
         if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
             int pkg_size,lsu;
             int pcm_frequency = u->ldac_info.pcm_frequency;
-            int bits = u->ldac_info.pcm_fmt;
+            int bytes = u->ldac_info.pcm_fmt;
             int channel = u->ldac_info.channel_mode == LDACBT_CHANNEL_MODE_MONO ? 1:2;
 //            switch (u->ldac_info.eqmid){
 //                case LDACBT_EQMID_HQ:
@@ -1077,15 +1081,15 @@ static void transport_config_mtu(struct userdata *u) {
             }
             u->ldac_info.ldac_frame_size = pkg_size;
             u->ldac_info.pcm_lsu = lsu;
-            u->ldac_info.pcm_bytes = bits;
+            u->ldac_info.pcm_bytes = bytes;
             u->ldac_info.pcm_channel = channel;
-            u->ldac_info.pcm_read_size = (lsu * bits * channel);
+            u->ldac_info.pcm_read_size = (lsu * bytes * channel);
             u->write_block_size =
                     (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
                     /pkg_size * u->ldac_info.pcm_read_size;
                     // /330 * 512;
-            pa_log_debug("LDAC transport write_block_size=%d pkg_size=%d lsu=%d bits/sample=%d channel=%d",
-                         (int) u->write_block_size,pkg_size,lsu,bits,channel);
+            pa_log_debug("LDAC transport write_block_size=%d pkg_size=%d lsu=%d bytes/sample=%d channel=%d",
+                         (int) u->write_block_size,pkg_size,lsu,bytes,channel);
 
         }
     }
@@ -1131,11 +1135,13 @@ static void setup_stream(struct userdata *u) {
         if(u->transport->codec == A2DP_CODEC_SBC){
             a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
             u->process_render = a2dp_process_render;
+
         }
         else if(u->transport->codec == A2DP_CODEC_VENDOR){
             int ret;
             a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
             if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID) {
+                u->ldac_info.layer_specific = 0;
                 if(u->ldac_info.hLdacBt){
                     ldacBT_free_handle(u->ldac_info.hLdacBt);
                 }
@@ -1164,7 +1170,7 @@ static void setup_stream(struct userdata *u) {
             }
         }
 
-        update_buffer_size(u);
+//        update_buffer_size(u);
     }
 
     u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
@@ -1663,13 +1669,28 @@ static void transport_config(struct userdata *u) {
         a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
         if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
             a2dp_ldac_t * config = (a2dp_ldac_t *) vendor_codec;
+            pa_sample_format_t fmt = u->core->default_sample_spec.format;
 
             pa_assert(u->transport);
 
-            u->sample_spec.format = PA_SAMPLE_S16LE;
             ldac_info_t * ldac_info = &u->ldac_info;
-            ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S16;
             ldac_info->hLdacBt = NULL;
+
+            if (fmt == PA_SAMPLE_FLOAT32LE || fmt == PA_SAMPLE_FLOAT32BE) {
+                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_F32;
+                u->sample_spec.format = PA_SAMPLE_FLOAT32LE;
+            } else if (fmt == PA_SAMPLE_S32LE || fmt == PA_SAMPLE_S32BE) {
+                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S32;
+                u->sample_spec.format = PA_SAMPLE_S32LE;
+            } else if (fmt == PA_SAMPLE_S24LE || fmt == PA_SAMPLE_S24BE
+                       || fmt == PA_SAMPLE_S24_32LE || fmt == PA_SAMPLE_S24_32BE) {
+                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S24;
+                u->sample_spec.format = PA_SAMPLE_S24LE;
+            } else {
+                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S16;
+                u->sample_spec.format = PA_SAMPLE_S16LE;
+            }
+
             switch (config->frequency) {
                 case LDACBT_SAMPLING_FREQ_044100:
                     ldac_info->pcm_frequency = 44100u;
@@ -1829,9 +1850,9 @@ static void thread_func(void *userdata) {
     /* Setup the stream only if the transport was already acquired */
     if (u->transport_acquired)
         setup_stream(u);
-    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr){
-        min_skip_blocks = (LDAC_ABR_THRESHOLD_CRITICAL-1) * u->ldac_info.ldac_frame_size / u->ldac_info.pcm_read_size;
-    }
+//    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr){
+//        min_skip_blocks = (LDAC_ABR_THRESHOLD_CRITICAL-1) * u->ldac_info.ldac_frame_size / u->ldac_info.pcm_read_size;
+//    }
     for (;;) {
         struct pollfd *pollfd;
         int ret;

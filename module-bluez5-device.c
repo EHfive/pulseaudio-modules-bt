@@ -68,9 +68,14 @@ PA_MODULE_USAGE("path=<device object path>"
 #define HSP_MAX_GAIN 15
 #define AVDT_MEDIA_HDR_SIZE 12
 
-#define LDAC_ABR_THRESHOLD_CRITICAL 4
-#define LDAC_ABR_THRESHOLD_DANGEROUSTREND 3
+#define LDAC_ABR_THRESHOLD_CRITICAL 6
+#define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
 #define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
+
+#define LDAC_SPEED_LOG_INTERVAL_SEC 30
+
+#define LDAC_SKIP_BLOCK 2
+#define LDAC_TX_LENGTH_FACTOR 4
 
 static const char* const valid_modargs[] = {
     "path",
@@ -726,16 +731,12 @@ static int ldac_process_render(struct userdata *u) {
     size_t to_write, to_encode;
     unsigned frame_count;
     int ret = 0;
+    int ldac_frame_read = u->ldac_info.pcm_bytes * u->ldac_info.pcm_channel * LDACBT_ENC_LSU;
 
     pa_assert(u);
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
     pa_assert(u->sink);
 
-    /* First, render some data */
-    if (!u->write_memchunk.memblock)
-        pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
-
-    pa_assert(u->write_memchunk.length == u->write_block_size);
 
     a2dp_prepare_buffer_ldac(u);
 
@@ -745,19 +746,20 @@ static int ldac_process_render(struct userdata *u) {
 
     frame_count = 0;
 
-    /* Try to create a packet of the full MTU */
-
-    p = (uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
-    to_encode = u->write_memchunk.length;
+    /* MAX pcm size for 1 LDAC packet (LDAC MQ) */
+    to_encode = (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
+                / 110 * u->ldac_info.pcm_read_size;
 
     d = (uint8_t*) ldac_info->buffer + sizeof(*header) + sizeof(*payload);
     to_write = ldac_info->buffer_size - sizeof(*header) - sizeof(*payload);
 
-    while (PA_LIKELY(to_encode > 0 && to_write > 0)) {
+    while (PA_LIKELY(to_encode > 0 && to_write > 0 && frame_count == 0)) {
         int written;
         int encoded;
         int ldac_frame_num;
         int ret_code;
+        pa_sink_render_full(u->sink, (size_t) ldac_frame_read, &u->write_memchunk);
+        p = (uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
 
         ret_code = ldacBT_encode(u->ldac_info.hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
 
@@ -770,27 +772,25 @@ static int ldac_process_render(struct userdata *u) {
             return -1;
         }
 
-        pa_assert_fp((size_t) encoded <= to_encode);
+        pa_assert_fp((size_t) encoded == ldac_frame_read);
         pa_assert_fp((size_t) written <= to_write);
 
 
-        p = (const uint8_t*) p + encoded;
         to_encode -= encoded;
 
         d = (uint8_t*) d + written;
         to_write -= written;
 
         frame_count+=ldac_frame_num;
+
+        pa_memblock_release(u->write_memchunk.memblock);
+        pa_memblock_unref(u->write_memchunk.memblock);
+        pa_memchunk_reset(&u->write_memchunk);
     }
 
 
-
-    pa_memblock_release(u->write_memchunk.memblock);
-
-    pa_assert(to_encode == 0);
-
     PA_ONCE_BEGIN {
-                    pa_log_debug("Using LDAC encoder version: %x", ldacBT_get_version());
+                    pa_log_notice("Using LDAC encoder version: %x", ldacBT_get_version());
                 } PA_ONCE_END;
 
     /* write it to the fifo */
@@ -798,7 +798,8 @@ static int ldac_process_render(struct userdata *u) {
     header->v = 2;
     header->pt = 1;
     header->sequence_number = htons(ldac_info->seq_num++);
-    header->timestamp = htonl(ldac_info->layer_specific * ldac_info->pcm_lsu);
+//    header->timestamp = htonl(ldac_info->layer_specific * ldac_info->pcm_lsu);
+    header->timestamp = htonl(u->write_index / pa_frame_size(&u->sample_spec));
     header->ssrc = htonl(1);
     payload->frame_count = frame_count;
     ldac_info->layer_specific += frame_count;
@@ -838,9 +839,7 @@ static int ldac_process_render(struct userdata *u) {
             break;
         }
 
-        u->write_index += (uint64_t) u->write_memchunk.length;
-        pa_memblock_unref(u->write_memchunk.memblock);
-        pa_memchunk_reset(&u->write_memchunk);
+        u->write_index += (uint64_t) frame_count * ldac_frame_read;
 
         ret = 1;
 
@@ -849,6 +848,7 @@ static int ldac_process_render(struct userdata *u) {
 
     return ret;
 }
+
 static void update_buffer_size(struct userdata *u) {
     int old_bufsize;
     socklen_t len = sizeof(int);
@@ -866,6 +866,9 @@ static void update_buffer_size(struct userdata *u) {
          * is larger than 512. If not, use the next multiple of write_block_size which is larger
          * than 1024. */
         new_bufsize = 2 * u->write_block_size;
+        if (u->ldac_info.hLdacBt)
+            /* 4 * LDAC HQ packet size*/
+            new_bufsize = 4 * 660;
         if (new_bufsize < 1024)
             new_bufsize = (1024 / u->write_block_size + 1) * u->write_block_size;
 
@@ -880,6 +883,7 @@ static void update_buffer_size(struct userdata *u) {
         }
     }
 }
+
 static void a2dp_set_sink(struct userdata *u){
     pa_sink_set_max_request_within_thread(u->sink, u->write_block_size);
     pa_sink_set_fixed_latency_within_thread(u->sink,
@@ -892,7 +896,7 @@ static void a2dp_set_sink(struct userdata *u){
         pa_memchunk_reset(&u->write_memchunk);
     }
 
-//    update_buffer_size(u);
+    update_buffer_size(u);
 }
 /* Run from I/O thread */
 static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
@@ -925,7 +929,7 @@ static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
             (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
             / sbc_info->frame_length * sbc_info->codesize;
     a2dp_set_sink(u);
-    update_buffer_size(u);
+//    update_buffer_size(u);
 }
 
 
@@ -1157,10 +1161,9 @@ static void setup_stream(struct userdata *u) {
             }
         }
 
-//        update_buffer_size(u);
     }
 
-    u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
+    u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NORMAL, 1);
     pollfd = pa_rtpoll_item_get_pollfd(u->rtpoll_item, NULL);
     pollfd->fd = u->stream_fd;
     pollfd->events = pollfd->revents = 0;
@@ -1824,6 +1827,9 @@ static void thread_func(void *userdata) {
     unsigned blocks_to_write = 0;
     unsigned bytes_to_write = 0;
     int min_skip_blocks = 2;
+    pa_usec_t ldac_last_tx_log_at=0;
+    uint32_t ldac_last_tx_bytes=0;
+
     pa_assert(u);
     pa_assert(u->transport);
 
@@ -1837,9 +1843,9 @@ static void thread_func(void *userdata) {
     /* Setup the stream only if the transport was already acquired */
     if (u->transport_acquired)
         setup_stream(u);
-//    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr){
-//        min_skip_blocks = (LDAC_ABR_THRESHOLD_CRITICAL-1) * u->ldac_info.ldac_frame_size / u->ldac_info.pcm_read_size;
-//    }
+    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr)
+        min_skip_blocks = LDAC_SKIP_BLOCK;
+
     for (;;) {
         struct pollfd *pollfd;
         int ret;
@@ -1948,11 +1954,7 @@ static void thread_func(void *userdata) {
                     }
                     size_t bytes_to_send =(time_passed > audio_sent)? pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec):0;
 
-                    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr && u->ldac_info.enable_abr)
-                        ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
-                                      (bytes_to_send * u->ldac_info.pcm_read_size * 2) / (u->write_block_size *
-                                                                                      u->ldac_info.ldac_frame_size),
-                                      u->ldac_info.enable_abr);
+
 
 
                     /* A new block needs to be sent. */
@@ -1970,7 +1972,7 @@ static void thread_func(void *userdata) {
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = (bytes_to_send / skip_size) * skip_size;
+                            skip_bytes = bytes_to_send - skip_size;
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",
@@ -2002,6 +2004,21 @@ static void thread_func(void *userdata) {
                     if (writable && blocks_to_write > 0) {
                         int result;
 
+                        if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr && u->ldac_info.enable_abr)
+                            ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
+                                          bytes_to_send * LDAC_TX_LENGTH_FACTOR / u->write_block_size,
+                                          u->ldac_info.enable_abr);
+
+                        if (u->ldac_info.hLdacBt && time_passed - ldac_last_tx_log_at >= 1000000 * LDAC_SPEED_LOG_INTERVAL_SEC) {
+
+                            pa_log_debug("LDAC Transport Average Speed: %.2fKbps, %d sec Speed: %.2fKbps/s. (as LDAC HQ)",
+                                        u->ldac_info.layer_specific * u->ldac_info.ldac_frame_size * 8 / (time_passed / 1000.0),
+                                        LDAC_SPEED_LOG_INTERVAL_SEC,
+                                        (u->ldac_info.layer_specific - ldac_last_tx_bytes) * u->ldac_info.ldac_frame_size * 8 /
+                                        ((time_passed - ldac_last_tx_log_at) / 1000.0));
+                            ldac_last_tx_log_at = time_passed;
+                            ldac_last_tx_bytes = u->ldac_info.layer_specific;
+                        }
                         if ((result = write_block(u)) < 0)
                             goto fail;
 
@@ -2028,7 +2045,7 @@ static void thread_func(void *userdata) {
                             /* We could not write because the stream was not ready. Let's try
                              * again in 500 ms and drop audio if we still can't write. The
                              * thread will also be woken up when we can write again. */
-                            sleep_for = PA_USEC_PER_MSEC * 500;
+                            sleep_for = PA_USEC_PER_MSEC * 20;
 
                         pa_rtpoll_set_timer_relative(u->rtpoll, sleep_for);
                         disable_timer = false;
@@ -2048,6 +2065,8 @@ static void thread_func(void *userdata) {
             pa_log_debug("pa_rtpoll_run failed with: %d", ret);
             goto fail;
         }
+        /* timer should be disabled after pa_rtpoll_run() ? */
+        pa_rtpoll_set_timer_disabled(u->rtpoll);
 
         if (ret == 0) {
             pa_log_debug("IO thread shutdown requested, stopping cleanly");

@@ -72,8 +72,9 @@ PA_MODULE_USAGE("path=<device object path>"
 #define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
 #define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
 
-#define LDAC_SPEED_LOG_INTERVAL_SEC 30
+#define LDAC_SPEED_LOG_INTERVAL_SEC 10
 
+#define LDAC_TX_BUFFER_SIZE (10 * 660)
 #define LDAC_SKIP_BLOCK 2
 #define LDAC_TX_LENGTH_FACTOR 4
 
@@ -867,8 +868,8 @@ static void update_buffer_size(struct userdata *u) {
          * than 1024. */
         new_bufsize = 2 * u->write_block_size;
         if (u->ldac_info.hLdacBt)
-            /* 4 * LDAC HQ packet size*/
-            new_bufsize = 4 * 660;
+            /* n * LDAC HQ packet size*/
+            new_bufsize = LDAC_TX_BUFFER_SIZE;
         if (new_bufsize < 1024)
             new_bufsize = (1024 / u->write_block_size + 1) * u->write_block_size;
 
@@ -1964,15 +1965,14 @@ static void thread_func(void *userdata) {
                          * the socket has not been accepting data fast enough (could be due to
                          * hiccups in the wireless transmission). We need to discard everything
                          * older than two block sizes (or more) to keep the latency from growing. */
-                        size_t skip_size = min_skip_blocks * u->write_block_size;
 
-                        if (bytes_to_send > skip_size) {
+                        if (bytes_to_send > min_skip_blocks * u->write_block_size) {
                             uint64_t skip_bytes;
                             pa_memchunk tmp;
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = bytes_to_send - skip_size;
+                            skip_bytes = (bytes_to_send / u->write_block_size) * u->write_block_size;
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",
@@ -2010,12 +2010,13 @@ static void thread_func(void *userdata) {
                                           u->ldac_info.enable_abr);
 
                         if (u->ldac_info.hLdacBt && time_passed - ldac_last_tx_log_at >= 1000000 * LDAC_SPEED_LOG_INTERVAL_SEC) {
-
-                            pa_log_debug("LDAC Transport Average Speed: %.2fKbps, %d sec Speed: %.2fKbps/s. (as LDAC HQ)",
+                            static const int aEqmidToAbrQualityModeID[]={ 0, 1, 4, 2, 3};
+                            pa_log_debug("LDAC Transport:: Average Speed: %.2fKbps, Speed(%d sec): %.2fKbps/s (as LDAC HQ); QualityModeId: %d",
                                         u->ldac_info.layer_specific * u->ldac_info.ldac_frame_size * 8 / (time_passed / 1000.0),
                                         LDAC_SPEED_LOG_INTERVAL_SEC,
                                         (u->ldac_info.layer_specific - ldac_last_tx_bytes) * u->ldac_info.ldac_frame_size * 8 /
-                                        ((time_passed - ldac_last_tx_log_at) / 1000.0));
+                                        ((time_passed - ldac_last_tx_log_at) / 1000.0),
+                                         aEqmidToAbrQualityModeID[ldacBT_get_eqmid(u->ldac_info.hLdacBt)]);
                             ldac_last_tx_log_at = time_passed;
                             ldac_last_tx_bytes = u->ldac_info.layer_specific;
                         }
@@ -2031,9 +2032,9 @@ static void thread_func(void *userdata) {
                     /* If nothing was written during this iteration, either the stream
                      * is not writable or there was no write pending. Set up a timer that
                      * will wake up the thread when the next data needs to be written. */
+                    pa_usec_t sleep_for;
+                    pa_usec_t next_write_at;
                     if (!have_written) {
-                        pa_usec_t sleep_for;
-                        pa_usec_t next_write_at;
 
                         if (writable) {
                             /* There was no write pending on this iteration of the loop.
@@ -2047,9 +2048,13 @@ static void thread_func(void *userdata) {
                              * thread will also be woken up when we can write again. */
                             sleep_for = PA_USEC_PER_MSEC * 20;
 
-                        pa_rtpoll_set_timer_relative(u->rtpoll, sleep_for);
-                        disable_timer = false;
+                    } else {
+                        next_write_at = pa_bytes_to_usec(u->write_index, &u->sample_spec);
+                        sleep_for = time_passed < next_write_at ? next_write_at - time_passed : 0;
                     }
+                    pa_rtpoll_set_timer_relative(u->rtpoll, sleep_for);
+                    disable_timer = false;
+
                 }
             }
 

@@ -10,10 +10,7 @@ link_directories(${CMAKE_INSTALL_PREFIX}/lib/pulseaudio)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_C_FLAGS " -pipe -fstack-protector-strong -O2 -Wall -fno-plt  -ffast-math -fno-common ")
-set(CMAKE_EXE_LINKER_FLAGS "")
-set(CMAKE_MODULE_LINKER_FLAGS "")
-set(CMAKE_SHARED_LINKER_FLAGS "")
+set(CMAKE_C_FLAGS "$ENV{CFLAGS} -O2 -Wall -fno-common -DFASTPATH")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
 
@@ -35,6 +32,7 @@ configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/confi
 set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
 set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
 
+# libldacBT_enc
 add_library(ldacBT_enc SHARED
         libldac/src/ldaclib.c
         libldac/src/ldacBT.c
@@ -43,6 +41,7 @@ add_library(ldacBT_enc SHARED
 
 target_link_libraries(ldacBT_enc m)
 
+# libbluez5-util
 add_library(bluez5-util SHARED
         config.h
         a2dp-codecs.h
@@ -52,7 +51,8 @@ add_library(bluez5-util SHARED
         )
 target_link_libraries(bluez5-util ${DBUS_LIBRARIES} ${MOD_LIBS})
 
-add_library(module-bluez5-discover SHARED
+# module-bluez5-discover
+add_library(module-bluez5-discover MODULE
         module-bluez5-discover.c
         bluez5-util.h
         config.h
@@ -63,7 +63,8 @@ target_link_libraries(module-bluez5-discover bluez5-util ${DBUS_LIBRARIES} ${MOD
 SET_TARGET_PROPERTIES(module-bluez5-discover PROPERTIES PREFIX "")
 
 
-add_library(module-bluez5-device SHARED
+# module-bluez5-device
+add_library(module-bluez5-device MODULE
         module-bluez5-device.c
         bluez5-util.h
         a2dp-codecs.h
@@ -75,7 +76,8 @@ target_compile_definitions(module-bluez5-device PUBLIC PA_MODULE_NAME=module_blu
 target_link_libraries(module-bluez5-device ldacBT_enc bluez5-util ${SBC_LIBRARIES} ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
-add_library(module-bluetooth-discover SHARED
+# module-bluetooth-discover
+add_library(module-bluetooth-discover MODULE
         config.h
         ${PROJECT_SOURCE_DIR}/pa/src/pulsecore/module.h
         ${PROJECT_SOURCE_DIR}/pa/src/modules/bluetooth/module-bluetooth-discover.c
@@ -85,7 +87,8 @@ target_compile_definitions(module-bluetooth-discover PUBLIC PA_MODULE_NAME=modul
 target_link_libraries(module-bluetooth-discover  ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluetooth-discover PROPERTIES PREFIX "")
 
-add_library(module-bluetooth-policy SHARED
+# module-bluetooth-policy
+add_library(module-bluetooth-policy MODULE
         config.h
         ${PROJECT_SOURCE_DIR}/pa/src/pulsecore/module.h
         ${PROJECT_SOURCE_DIR}/pa/src/modules/bluetooth/module-bluetooth-policy.c

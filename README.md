@@ -60,7 +60,7 @@ pulseaudio --start
 
 then connect your bluetooth device and switch audio profile to 'A2DP Sink'
 
-if there is only profile 'HSP/HFP' and 'off', disconnect and reconnect you device
+if there is only profile 'HSP/HFP' and 'off', disconnect and reconnect your device
 
 > [" When the device connects automatically (by powering on after being paired) A2DP is 'unavailable' "   -----Issue: cannot select a2dp profile](https://gitlab.freedesktop.org/pulseaudio/pulseaudio/issues/525)
 

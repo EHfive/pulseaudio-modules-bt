@@ -3,4 +3,4 @@
 	url = https://github.com/pulseaudio/pulseaudio.git
 [submodule "libldac"]
 	path = libldac
-	url = https://android.googlesource.com/platform/external/libldac
+	url = https://gitlab.com/eh5/libldac.git

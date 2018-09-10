@@ -37,7 +37,7 @@ PA_MODULE_VERSION(PACKAGE_VERSION);
 PA_MODULE_LOAD_ONCE(true);
 PA_MODULE_USAGE(
         "headset=ofono|native|auto"
-        "use_ldac=<boolean>"
+        "ldac=<boolean>"
         "ldac_eqmid=hq|sq|mq|auto"
 );
 

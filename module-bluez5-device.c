@@ -72,9 +72,9 @@ PA_MODULE_USAGE("path=<device object path>"
 #define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
 #define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
 
-#define LDAC_SPEED_LOG_INTERVAL_SEC 10
+#define LDAC_SPEED_LOG_INTERVAL_SEC 60
 
-#define LDAC_TX_BUFFER_SIZE (10 * 660)
+#define LDAC_TX_BUFFER_SIZE (2 * 660)
 #define LDAC_SKIP_BLOCK 2
 #define LDAC_TX_LENGTH_FACTOR 4
 
@@ -1164,7 +1164,7 @@ static void setup_stream(struct userdata *u) {
 
     }
 
-    u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NORMAL, 1);
+    u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
     pollfd = pa_rtpoll_item_get_pollfd(u->rtpoll_item, NULL);
     pollfd->fd = u->stream_fd;
     pollfd->events = pollfd->revents = 0;
@@ -1828,8 +1828,9 @@ static void thread_func(void *userdata) {
     unsigned blocks_to_write = 0;
     unsigned bytes_to_write = 0;
     int min_skip_blocks = 2;
-    pa_usec_t ldac_last_tx_log_at=0;
-    uint32_t ldac_last_tx_bytes=0;
+    pa_usec_t ldac_last_tx_log_at = 0;
+    uint32_t ldac_last_tx_bytes = 0;
+    size_t skip_bytes_add = 0;
 
     pa_assert(u);
     pa_assert(u->transport);
@@ -1995,6 +1996,9 @@ static void thread_func(void *userdata) {
 
                             if (u->write_index > 0 && u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK && u->transport->codec == A2DP_CODEC_SBC)
                                 a2dp_reduce_bitpool(u);
+
+                            if (!writable)
+                                skip_bytes_add += skip_bytes;
                         }
 
                         blocks_to_write = 1;
@@ -2004,10 +2008,12 @@ static void thread_func(void *userdata) {
                     if (writable && blocks_to_write > 0) {
                         int result;
 
-                        if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr && u->ldac_info.enable_abr)
+                        if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr && u->ldac_info.enable_abr){
                             ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
-                                          bytes_to_send * LDAC_TX_LENGTH_FACTOR / u->write_block_size,
+                                          (bytes_to_send + skip_bytes_add) * LDAC_TX_LENGTH_FACTOR / u->write_block_size,
                                           u->ldac_info.enable_abr);
+                            skip_bytes_add = 0;
+                        }
 
                         if (u->ldac_info.hLdacBt && time_passed - ldac_last_tx_log_at >= 1000000 * LDAC_SPEED_LOG_INTERVAL_SEC) {
                             static const int aEqmidToAbrQualityModeID[]={ 0, 1, 4, 2, 3};

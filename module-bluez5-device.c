@@ -732,7 +732,8 @@ static int ldac_process_render(struct userdata *u) {
     size_t to_write, to_encode;
     unsigned frame_count;
     int ret = 0;
-    int ldac_frame_read = u->ldac_info.pcm_bytes * u->ldac_info.pcm_channel * LDACBT_ENC_LSU;
+    const int ldac_frame_read = u->ldac_info.pcm_bytes * u->ldac_info.pcm_channel * u->ldac_info.pcm_lsu;
+    const int ldac_enc_read = u->ldac_info.pcm_bytes * u->ldac_info.pcm_channel * LDACBT_ENC_LSU;
 
     pa_assert(u);
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
@@ -759,7 +760,7 @@ static int ldac_process_render(struct userdata *u) {
         int encoded;
         int ldac_frame_num;
         int ret_code;
-        pa_sink_render_full(u->sink, (size_t) ldac_frame_read, &u->write_memchunk);
+        pa_sink_render_full(u->sink, (size_t) ldac_enc_read, &u->write_memchunk);
         p = (uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
 
         ret_code = ldacBT_encode(u->ldac_info.hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
@@ -773,7 +774,7 @@ static int ldac_process_render(struct userdata *u) {
             return -1;
         }
 
-        pa_assert_fp((size_t) encoded == ldac_frame_read);
+        pa_assert_fp((size_t) encoded == ldac_enc_read);
         pa_assert_fp((size_t) written <= to_write);
 
 

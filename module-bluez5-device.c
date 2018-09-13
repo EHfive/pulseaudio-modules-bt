@@ -74,8 +74,11 @@ PA_MODULE_USAGE("path=<device object path>"
 
 #define LDAC_SPEED_LOG_INTERVAL_SEC 60
 
-#define LDAC_TX_BUFFER_SIZE (2 * 660)
-#define LDAC_SKIP_BLOCK 2
+#define LDAC_RTP_PACKET_SIZE (660 + sizeof(struct rtp_header) + sizeof(struct rtp_payload))
+#define LDAC_TX_BUFFER_NUM 2
+#define LDAC_SKIP_BLOCK (LDAC_TX_BUFFER_NUM * 2)
+#define LDAC_TX_BUFFER_SIZE (LDAC_TX_BUFFER_NUM * LDAC_RTP_PACKET_SIZE)
+
 #define LDAC_TX_LENGTH_FACTOR 4
 
 static const char* const valid_modargs[] = {

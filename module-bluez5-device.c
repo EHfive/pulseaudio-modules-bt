@@ -133,6 +133,7 @@ typedef struct ldac_info {
     int pcm_channel;
     uint16_t seq_num;
     uint32_t layer_specific;
+    uint32_t written;
     void * buffer;
     size_t buffer_size;
 
@@ -792,7 +793,12 @@ static int ldac_process_render(struct userdata *u) {
 
 
     PA_ONCE_BEGIN {
-                    pa_log_notice("Using LDAC encoder version: %x", ldacBT_get_version());
+                    const int v = ldacBT_get_version();
+                    pa_log_notice("Using LDAC encoder version: %x.%02x.%02x",
+                                  v >> 16,
+                                  (v >> 8) & 0x0ff,
+                                  v & 0x0ff
+                    );
                 } PA_ONCE_END;
 
     /* write it to the fifo */
@@ -841,6 +847,7 @@ static int ldac_process_render(struct userdata *u) {
             break;
         }
 
+        ldac_info->written += nbytes - sizeof(*header) - sizeof(*payload);
         u->write_index += (uint64_t) frame_count * ldac_frame_read;
 
         ret = 1;
@@ -1135,6 +1142,7 @@ static void setup_stream(struct userdata *u) {
             a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
             if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID) {
                 u->ldac_info.layer_specific = 0;
+                u->ldac_info.written = 0;
                 if(u->ldac_info.hLdacBt){
                     ldacBT_free_handle(u->ldac_info.hLdacBt);
                 }
@@ -2018,15 +2026,16 @@ static void thread_func(void *userdata) {
 
                         if (u->ldac_info.hLdacBt && time_passed - ldac_last_tx_log_at >= 1000000 * LDAC_SPEED_LOG_INTERVAL_SEC) {
                             static const int aEqmidToAbrQualityModeID[]={ 0, 1, 4, 2, 3};
-                            pa_log_debug("LDAC Transport:: Average Speed: %.2fKbps, Speed(%d sec): %.2fKbps/s (as LDAC HQ); QualityModeId: %d",
-                                        u->ldac_info.layer_specific * u->ldac_info.ldac_frame_size * 8 / (time_passed / 1000.0),
+                            pa_log_debug("LDAC Transmission:: Average Speed: %.2fKbps, Speed(%d sec): %.2fKbps; QualityModeId: %d",
+                                        u->ldac_info.written * 8 / (time_passed / 1000.0),
                                         LDAC_SPEED_LOG_INTERVAL_SEC,
-                                        (u->ldac_info.layer_specific - ldac_last_tx_bytes) * u->ldac_info.ldac_frame_size * 8 /
+                                        (u->ldac_info.written - ldac_last_tx_bytes) * 8 /
                                         ((time_passed - ldac_last_tx_log_at) / 1000.0),
                                          aEqmidToAbrQualityModeID[ldacBT_get_eqmid(u->ldac_info.hLdacBt)]);
                             ldac_last_tx_log_at = time_passed;
-                            ldac_last_tx_bytes = u->ldac_info.layer_specific;
+                            ldac_last_tx_bytes = u->ldac_info.written;
                         }
+
                         if ((result = write_block(u)) < 0)
                             goto fail;
 

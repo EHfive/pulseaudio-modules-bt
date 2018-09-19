@@ -5,7 +5,6 @@ include_directories(.)
 include_directories(pa/src)
 include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
-link_directories(${CMAKE_INSTALL_PREFIX}/lib/pulseaudio)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -20,17 +19,30 @@ add_definitions(-DENABLE_LDAC)
 add_definitions(-D_REENTRANT)
 
 find_package(PkgConfig REQUIRED)
-find_package(PulseAudio  REQUIRED)
+pkg_check_modules(PulseAudio REQUIRED "libpulse")
 pkg_check_modules(DBUS REQUIRED "dbus-1")
 pkg_check_modules(SBC REQUIRED "sbc")
 
+set(PulseAudio_CORE_LIBDIR ${PulseAudio_LIBDIR}/pulseaudio)
+
 include_directories(${DBUS_INCLUDE_DIRS})
 include_directories(${SBC_INCLUDE_DIRS})
+link_directories(${PulseAudio_CORE_LIBDIR})
+
+execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=modlibexecdir libpulse
+        OUTPUT_VARIABLE PulseAudio_modlibexecdir
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+if("" STREQUAL "${PulseAudio_modlibexecdir}")
+    message(SEND_ERROR "Can't found variable modlibexecdir in libpulse.pc")
+    SET(PulseAudio_modlibexecdir ${PulseAudio_LIBDIR}/pulse-${PulseAudio_VERSION}/modules)
+    message(WARNING "SET PulseAudio_modlibexecdir = ${PulseAudio_modlibexecdir}")
+endif()
+
 
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
 
-set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
-set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
+set(MOD_LIBS ${PulseAudio_LIBRARYS} pthread pulsecore-${PulseAudio_VERSION})
+set(CMAKE_INSTALL_RPATH ${PulseAudio_CORE_LIBDIR}:${PulseAudio_modlibexecdir})
 
 # libldacBT_enc
 add_library(ldacBT_enc SHARED
@@ -101,4 +113,4 @@ SET_TARGET_PROPERTIES(module-bluetooth-policy PROPERTIES PREFIX "")
 message(STATUS "CMAKE_C_FLAGS = " ${CMAKE_C_FLAGS})
 
 INSTALL(TARGETS ldacBT_enc module-bluez5-device module-bluez5-discover bluez5-util module-bluetooth-policy module-bluetooth-discover
-        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules/)
+        LIBRARY DESTINATION ${PulseAudio_modlibexecdir})

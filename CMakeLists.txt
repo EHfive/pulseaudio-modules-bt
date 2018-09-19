@@ -29,7 +29,7 @@ include_directories(${SBC_INCLUDE_DIRS})
 
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
 
-set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
+set(MOD_LIBS ${PULSEAUDIO_LIBRARY} pthread)
 set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib/pulseaudio:${CMAKE_INSTALL_PREFIX}/lib/pulse-${PulseAudio_VERSION}/modules)
 
 # libldacBT_enc

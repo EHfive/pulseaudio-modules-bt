@@ -19,10 +19,10 @@ install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packag
 
 * pulseaudio,libpulse~=12.0
 * bluez,bluez-libs/libbluetooth~=5.0
+* libdbus
 * sbc
 * cmake
 * pkg-config
-* libdbus-dev
 
 **backup original pulseaudio bt modules**
 

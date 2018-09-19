@@ -21,17 +21,15 @@ install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packag
 * bluez,bluez-libs/libbluetooth~=5.0
 * sbc
 * cmake
+* pkg-config
 * libdbus-dev
 
 **backup original pulseaudio bt modules**
 
 ```bash
-VER=`pkg-config libpulse --modversion` # your current pulseaudio version
-cd /usr/lib/pulse-$VER/modules
+MODDIR=`pkg-config --variable=modlibexecdir libpulse`
 
-cp module-bluez5-device.so module-bluez5-device.so.bak
-cp libbluez5-util.so libbluez5-util.so.bak
-# ... modules about bluez5 or bluetooth
+sudo find $MODDIR -regex ".*\(bluez5\|bluetooth\).*\.so" -exec cp {} {}.bak \;
 ```
 
 **install**
@@ -43,11 +41,10 @@ git submodule update --init
 
 git -C pa/ checkout v`pkg-config libpulse --modversion`
 
-mkdir build
-cd build
-cmake -DCMAKE_INSTALL_PREFIX=/usr ..
+mkdir build && cd build
+cmake ..
 make
-make install
+sudo make install
 ```
 
 #### Load Modules
@@ -100,6 +97,9 @@ equivalent to commands below if you do not use 'module-bluetooth-discover'
 
     #load-module module-bluez5-discover ldac=false
 
+#### Others
+
+see [Wiki](https://github.com/EHfive/pulseaudio-modules-bt/wiki)
 
 ## TODO
 

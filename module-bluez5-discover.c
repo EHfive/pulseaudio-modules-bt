@@ -79,7 +79,7 @@ static pa_hook_result_t device_connection_changed_cb(pa_bluetooth_discovery *y, 
         char *args = pa_sprintf_malloc("path=%s autodetect_mtu=%i", d->path, (int)u->autodetect_mtu);
 
         pa_log_debug("Loading module-bluez5-device %s", args);
-        pa_module_load(&m, u->module->core, "module-bluez5-device", args);
+        pa_module_load(u->module->core, "module-bluez5-device", args);
         pa_xfree(args);
 
         if (m)

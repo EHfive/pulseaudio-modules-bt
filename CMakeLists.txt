@@ -3,6 +3,7 @@ project(pulseaudio_modules_bt C)
 
 include_directories(.)
 include_directories(pa/src)
+include_directories(pa_symdef)
 include_directories(libldac/inc)
 include_directories(libldac/abr/inc)
 

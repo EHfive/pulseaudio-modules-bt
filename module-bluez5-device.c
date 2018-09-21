@@ -1370,7 +1370,7 @@ static int add_source(struct userdata *u) {
 
     u->source->userdata = u;
     u->source->parent.process_msg = source_process_msg;
-    u->source->set_state_in_io_thread = source_set_state_in_io_thread_cb;
+//    u->source->set_state_in_io_thread = source_set_state_in_io_thread_cb;
 
     if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY) {
         pa_source_set_set_volume_callback(u->source, source_set_volume_cb);
@@ -1545,7 +1545,7 @@ static int add_sink(struct userdata *u) {
 
     u->sink->userdata = u;
     u->sink->parent.process_msg = sink_process_msg;
-    u->sink->set_state_in_io_thread = sink_set_state_in_io_thread_cb;
+//    u->sink->set_state_in_io_thread = sink_set_state_in_io_thread_cb;
 
     if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY) {
         pa_sink_set_set_volume_callback(u->sink, sink_set_volume_cb);

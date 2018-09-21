@@ -1,3 +1,4 @@
+For pulseaudio v11.0,v11.1 users
 # pulseaudio-modules-bt
 
 this module is a fork of pulseaudio bluetooth modules
@@ -17,7 +18,7 @@ install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packag
 
 **requirements**
 
-* pulseaudio,libpulse~=12.0
+* pulseaudio,libpulse=11.0,11.1
 * bluez,bluez-libs/libbluetooth~=5.0
 * libdbus
 * sbc

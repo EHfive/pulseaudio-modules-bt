@@ -78,7 +78,7 @@ as an alternative, you can fix it with this [udev script](https://gist.github.co
 
 #### config
 
-edit `/etc/pulse/deamon.conf`
+edit `/etc/pulse/default.pa`
 
 append arguments to 'load-module module-bluetooth-discover'
 

@@ -4,3 +4,5 @@
 #define HAVE_BLUEZ_5_OFONO_HEADSET
 #define HAVE_BLUEZ_5_NATIVE_HEADSET
 #define PACKAGE_VERSION "@PulseAudio_VERSION@"
+
+#include <sys/socket.h>

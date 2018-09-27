@@ -29,24 +29,19 @@
 #include <pulsecore/shared.h>
 
 #include "bluez5-util.h"
-#include "ldacBT.h"
 
 PA_MODULE_AUTHOR("João Paulo Rechi Vita");
 PA_MODULE_DESCRIPTION("Detect available BlueZ 5 Bluetooth audio devices and load BlueZ 5 Bluetooth audio drivers");
 PA_MODULE_VERSION(PACKAGE_VERSION);
 PA_MODULE_LOAD_ONCE(true);
 PA_MODULE_USAGE(
-        "headset=ofono|native|auto"
-        "ldac=<boolean>"
-        "ldac_eqmid=hq|sq|mq|auto"
+    "headset=ofono|native|auto"
 );
 
 static const char* const valid_modargs[] = {
-        "headset",
-        "autodetect_mtu",
-        "ldac",
-        "ldac_eqmid",
-        NULL
+    "headset",
+    "autodetect_mtu",
+    NULL
 };
 
 struct userdata {
@@ -107,9 +102,6 @@ int pa__init(pa_module *m) {
     const char *headset_str;
     int headset_backend;
     bool autodetect_mtu;
-    bool use_ldac;
-    const char *ldac_eqmid_str;
-    int ldac_eqmid;
 
     pa_assert(m);
 
@@ -136,48 +128,23 @@ int pa__init(pa_module *m) {
         goto fail;
     }
 
-    use_ldac = true;
-    if (pa_modargs_get_value_boolean(ma, "ldac", &use_ldac) < 0) {
-        pa_log("Invalid boolean value for ldac parameter");
-        goto fail;
-    }
-
-    pa_assert_se(ldac_eqmid_str = pa_modargs_get_value(ma, "ldac_eqmid", "auto"));
-    if (pa_streq(ldac_eqmid_str, "hq"))
-        ldac_eqmid = LDACBT_EQMID_HQ;
-    else if (pa_streq(ldac_eqmid_str, "sq"))
-        ldac_eqmid = LDACBT_EQMID_SQ;
-    else if (pa_streq(ldac_eqmid_str, "mq"))
-        ldac_eqmid = LDACBT_EQMID_MQ;
-    else if (pa_streq(ldac_eqmid_str, "auto"))
-        ldac_eqmid = LDACBT_EQMID_ABR;
-    else if (pa_streq(ldac_eqmid_str, "abr"))
-        ldac_eqmid = LDACBT_EQMID_ABR;
-    else {
-        pa_log("ldac-eqmid parameter must be either hq, sq, mq, or auto/abr (found %s)", headset_str);
-        goto fail;
-    }
-
-
-
-
     m->userdata = u = pa_xnew0(struct userdata, 1);
     u->module = m;
     u->core = m->core;
     u->autodetect_mtu = autodetect_mtu;
     u->loaded_device_paths = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
 
-    if (!(u->discovery = pa_bluetooth_discovery_get(u->core, headset_backend, use_ldac, ldac_eqmid)))
+    if (!(u->discovery = pa_bluetooth_discovery_get(u->core, headset_backend)))
         goto fail;
 
     u->device_connection_changed_slot =
-            pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_DEVICE_CONNECTION_CHANGED),
-                            PA_HOOK_NORMAL, (pa_hook_cb_t) device_connection_changed_cb, u);
+        pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_DEVICE_CONNECTION_CHANGED),
+                        PA_HOOK_NORMAL, (pa_hook_cb_t) device_connection_changed_cb, u);
 
     pa_modargs_free(ma);
     return 0;
 
-    fail:
+fail:
     if (ma)
         pa_modargs_free(ma);
     pa__done(m);

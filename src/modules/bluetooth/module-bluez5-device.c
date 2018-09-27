@@ -46,8 +46,6 @@
 #include <pulsecore/time-smoother.h>
 
 #include "a2dp-codecs.h"
-#include "ldacBT.h"
-#include "ldacBT_abr.h"
 #include "bluez5-util.h"
 #include "rtp.h"
 
@@ -66,20 +64,6 @@ PA_MODULE_USAGE("path=<device object path>"
 #define BITPOOL_DEC_LIMIT 32
 #define BITPOOL_DEC_STEP 5
 #define HSP_MAX_GAIN 15
-#define AVDT_MEDIA_HDR_SIZE 12
-
-#define LDAC_ABR_THRESHOLD_CRITICAL 6
-#define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
-#define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
-
-#define LDAC_SPEED_LOG_INTERVAL_SEC 60
-
-#define LDAC_RTP_PACKET_SIZE (660 + sizeof(struct rtp_header) + sizeof(struct rtp_payload))
-#define LDAC_TX_BUFFER_NUM 2
-#define LDAC_SKIP_BLOCK (LDAC_TX_BUFFER_NUM * 2)
-#define LDAC_TX_BUFFER_SIZE (LDAC_TX_BUFFER_NUM * LDAC_RTP_PACKET_SIZE)
-
-#define LDAC_TX_LENGTH_FACTOR 4
 
 static const char* const valid_modargs[] = {
     "path",
@@ -121,27 +105,6 @@ typedef struct sbc_info {
     size_t buffer_size;                  /* Size of the buffer */
 } sbc_info_t;
 
-typedef struct ldac_info {
-    HANDLE_LDAC_BT hLdacBt;
-    HANDLE_LDAC_ABR hLdacAbr;
-    uint8_t eqmid;
-    bool enable_abr;
-    uint8_t channel_mode;
-    LDACBT_SMPL_FMT_T pcm_fmt;
-    int pcm_frequency;
-    int ldac_frame_size;
-    int pcm_read_size;
-    int pcm_lsu;
-    int pcm_bytes;
-    int pcm_channel;
-    uint16_t seq_num;
-    uint32_t layer_specific;
-    uint32_t written;
-    void * buffer;
-    size_t buffer_size;
-
-} ldac_info_t;
-
 struct userdata {
     pa_module *module;
     pa_core *core;
@@ -172,7 +135,6 @@ struct userdata {
 
     int stream_fd;
     int stream_write_type;
-    int (*process_render)(struct userdata *);
     size_t read_link_mtu;
     size_t write_link_mtu;
     size_t read_block_size;
@@ -184,7 +146,6 @@ struct userdata {
     pa_memchunk write_memchunk;
     pa_sample_spec sample_spec;
     struct sbc_info sbc_info;
-    struct ldac_info ldac_info;
 };
 
 typedef enum pa_bluetooth_form_factor {
@@ -206,14 +167,14 @@ static pa_bluetooth_form_factor_t form_factor_from_class(uint32_t class_of_devic
     pa_bluetooth_form_factor_t r;
 
     static const pa_bluetooth_form_factor_t table[] = {
-            [1] = PA_BLUETOOTH_FORM_FACTOR_HEADSET,
-            [2] = PA_BLUETOOTH_FORM_FACTOR_HANDSFREE,
-            [4] = PA_BLUETOOTH_FORM_FACTOR_MICROPHONE,
-            [5] = PA_BLUETOOTH_FORM_FACTOR_SPEAKER,
-            [6] = PA_BLUETOOTH_FORM_FACTOR_HEADPHONE,
-            [7] = PA_BLUETOOTH_FORM_FACTOR_PORTABLE,
-            [8] = PA_BLUETOOTH_FORM_FACTOR_CAR,
-            [10] = PA_BLUETOOTH_FORM_FACTOR_HIFI
+        [1] = PA_BLUETOOTH_FORM_FACTOR_HEADSET,
+        [2] = PA_BLUETOOTH_FORM_FACTOR_HANDSFREE,
+        [4] = PA_BLUETOOTH_FORM_FACTOR_MICROPHONE,
+        [5] = PA_BLUETOOTH_FORM_FACTOR_SPEAKER,
+        [6] = PA_BLUETOOTH_FORM_FACTOR_HEADPHONE,
+        [7] = PA_BLUETOOTH_FORM_FACTOR_PORTABLE,
+        [8] = PA_BLUETOOTH_FORM_FACTOR_CAR,
+        [10] = PA_BLUETOOTH_FORM_FACTOR_HIFI
     };
 
     /*
@@ -296,7 +257,7 @@ static int sco_process_render(struct userdata *u) {
 
     pa_assert(u);
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT ||
-              u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
+                u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
     pa_assert(u->sink);
 
     pa_sink_render_full(u->sink, u->write_block_size, &memchunk);
@@ -342,8 +303,8 @@ static int sco_process_render(struct userdata *u) {
 
     if ((size_t) l != memchunk.length) {
         pa_log_error("Wrote memory block to socket only partially! %llu written, wanted to write %llu.",
-                     (unsigned long long) l,
-                     (unsigned long long) memchunk.length);
+                    (unsigned long long) l,
+                    (unsigned long long) memchunk.length);
 
         pa_memblock_unref(memchunk.memblock);
         return -1;
@@ -366,7 +327,7 @@ static int sco_process_push(struct userdata *u) {
 
     pa_assert(u);
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT ||
-              u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
+                u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
     pa_assert(u->source);
     pa_assert(u->read_smoother);
 
@@ -462,21 +423,6 @@ static void a2dp_prepare_buffer(struct userdata *u) {
     u->sbc_info.buffer_size = 2 * min_buffer_size;
     pa_xfree(u->sbc_info.buffer);
     u->sbc_info.buffer = pa_xmalloc(u->sbc_info.buffer_size);
-
-}
-
-static void a2dp_prepare_buffer_ldac(struct userdata *u) {
-    size_t min_buffer_size = PA_MAX(u->read_link_mtu, u->write_link_mtu);
-
-    pa_assert(u);
-
-    if (u->ldac_info.buffer_size >= min_buffer_size)
-        return;
-
-    u->ldac_info.buffer_size = 2 * min_buffer_size;
-    pa_xfree(u->ldac_info.buffer);
-    u->ldac_info.buffer = pa_xmalloc(u->ldac_info.buffer_size);
-
 }
 
 /* Run from IO thread */
@@ -552,8 +498,8 @@ static int a2dp_process_render(struct userdata *u) {
     pa_assert(to_encode == 0);
 
     PA_ONCE_BEGIN {
-                    pa_log_debug("Using SBC encoder implementation: %s", pa_strnull(sbc_get_implementation_info(&sbc_info->sbc)));
-                } PA_ONCE_END;
+        pa_log_debug("Using SBC encoder implementation: %s", pa_strnull(sbc_get_implementation_info(&sbc_info->sbc)));
+    } PA_ONCE_END;
 
     /* write it to the fifo */
     memset(sbc_info->buffer, 0, sizeof(*header) + sizeof(*payload));
@@ -726,141 +672,6 @@ static int a2dp_process_push(struct userdata *u) {
     return ret;
 }
 
-static int ldac_process_render(struct userdata *u) {
-    struct ldac_info *ldac_info;
-    struct rtp_header *header;
-    struct rtp_payload *payload;
-    size_t nbytes;
-    void *d;
-    const void *p;
-    size_t to_write, to_encode;
-    unsigned frame_count;
-    int ret = 0;
-    const int ldac_frame_read = u->ldac_info.pcm_bytes * u->ldac_info.pcm_channel * u->ldac_info.pcm_lsu;
-    const int ldac_enc_read = u->ldac_info.pcm_bytes * u->ldac_info.pcm_channel * LDACBT_ENC_LSU;
-
-    pa_assert(u);
-    pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
-    pa_assert(u->sink);
-
-
-    a2dp_prepare_buffer_ldac(u);
-
-    ldac_info = &u->ldac_info;
-    header = ldac_info->buffer;
-    payload = (struct rtp_payload*) ((uint8_t*) ldac_info->buffer + sizeof(*header));
-
-    frame_count = 0;
-
-    /* MAX pcm size for 1 LDAC packet (LDAC MQ) */
-    to_encode = (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-                / 110 * u->ldac_info.pcm_read_size;
-
-    d = (uint8_t*) ldac_info->buffer + sizeof(*header) + sizeof(*payload);
-    to_write = ldac_info->buffer_size - sizeof(*header) - sizeof(*payload);
-
-    while (PA_LIKELY(to_encode > 0 && to_write > 0 && frame_count == 0)) {
-        int written;
-        int encoded;
-        int ldac_frame_num;
-        int ret_code;
-        pa_sink_render_full(u->sink, (size_t) ldac_enc_read, &u->write_memchunk);
-        p = (uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
-
-        ret_code = ldacBT_encode(u->ldac_info.hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
-
-        if (PA_UNLIKELY(ret_code < 0)) {
-            pa_log_error("LDAC encoding error, written:%d encoded:%d ldac_frame_num:%d",written,encoded,ldac_frame_num);
-            int err = ldacBT_get_error_code(u->ldac_info.hLdacBt);
-            pa_log_error("LDACBT_API_ERR:%d  LDACBT_HANDLE_ERR:%d  LDACBT_BLOCK_ERR:%d",LDACBT_API_ERR(err),LDACBT_HANDLE_ERR(err),LDACBT_BLOCK_ERR(err));
-
-            pa_memblock_release(u->write_memchunk.memblock);
-            return -1;
-        }
-
-        pa_assert_fp((size_t) encoded == ldac_enc_read);
-        pa_assert_fp((size_t) written <= to_write);
-
-
-        to_encode -= encoded;
-
-        d = (uint8_t*) d + written;
-        to_write -= written;
-
-        frame_count+=ldac_frame_num;
-
-        pa_memblock_release(u->write_memchunk.memblock);
-        pa_memblock_unref(u->write_memchunk.memblock);
-        pa_memchunk_reset(&u->write_memchunk);
-    }
-
-
-    PA_ONCE_BEGIN {
-                    const int v = ldacBT_get_version();
-                    pa_log_notice("Using LDAC encoder version: %x.%02x.%02x",
-                                  v >> 16,
-                                  (v >> 8) & 0x0ff,
-                                  v & 0x0ff
-                    );
-                } PA_ONCE_END;
-
-    /* write it to the fifo */
-    memset(ldac_info->buffer, 0, sizeof(*header) + sizeof(*payload));
-    header->v = 2;
-    header->pt = 1;
-    header->sequence_number = htons(ldac_info->seq_num++);
-//    header->timestamp = htonl(ldac_info->layer_specific * ldac_info->pcm_lsu);
-    header->timestamp = htonl(u->write_index / pa_frame_size(&u->sample_spec));
-    header->ssrc = htonl(1);
-    payload->frame_count = frame_count;
-    ldac_info->layer_specific += frame_count;
-
-    nbytes = (uint8_t*) d - (uint8_t*) ldac_info->buffer;
-    for (;;) {
-        ssize_t l;
-
-        l = pa_write(u->stream_fd, ldac_info->buffer, nbytes, &u->stream_write_type);
-
-        pa_assert(l != 0);
-
-        if (l < 0) {
-
-            if (errno == EINTR)
-                /* Retry right away if we got interrupted */
-                continue;
-
-            else if (errno == EAGAIN) {
-                /* Hmm, apparently the socket was not writable, give up for now */
-                pa_log_debug("Got EAGAIN on write() after POLLOUT, probably there is a temporary connection loss.");
-                break;
-            }
-
-            pa_log_error("Failed to write data to socket: %s", pa_cstrerror(errno));
-            ret = -1;
-            break;
-        }
-
-        pa_assert((size_t) l <= nbytes);
-
-        if ((size_t) l != nbytes) {
-            pa_log_warn("Wrote memory block to socket only partially! %llu written, wanted to write %llu.",
-                        (unsigned long long) l,
-                        (unsigned long long) nbytes);
-            ret = -1;
-            break;
-        }
-
-        ldac_info->written += nbytes - sizeof(*header) - sizeof(*payload);
-        u->write_index += (uint64_t) frame_count * ldac_frame_read;
-
-        ret = 1;
-
-        break;
-    }
-
-    return ret;
-}
-
 static void update_buffer_size(struct userdata *u) {
     int old_bufsize;
     socklen_t len = sizeof(int);
@@ -878,9 +689,6 @@ static void update_buffer_size(struct userdata *u) {
          * is larger than 512. If not, use the next multiple of write_block_size which is larger
          * than 1024. */
         new_bufsize = 2 * u->write_block_size;
-        if (u->ldac_info.hLdacBt)
-            /* n * LDAC HQ packet size*/
-            new_bufsize = LDAC_TX_BUFFER_SIZE;
         if (new_bufsize < 1024)
             new_bufsize = (1024 / u->write_block_size + 1) * u->write_block_size;
 
@@ -896,20 +704,6 @@ static void update_buffer_size(struct userdata *u) {
     }
 }
 
-static void a2dp_set_sink(struct userdata *u){
-    pa_sink_set_max_request_within_thread(u->sink, u->write_block_size);
-    pa_sink_set_fixed_latency_within_thread(u->sink,
-                                            FIXED_LATENCY_PLAYBACK_A2DP + pa_bytes_to_usec(u->write_block_size, &u->sample_spec));
-
-    /* If there is still data in the memchunk, we have to discard it
-     * because the write_block_size may have changed. */
-    if (u->write_memchunk.memblock) {
-        pa_memblock_unref(u->write_memchunk.memblock);
-        pa_memchunk_reset(&u->write_memchunk);
-    }
-
-    update_buffer_size(u);
-}
 /* Run from I/O thread */
 static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
     struct sbc_info *sbc_info;
@@ -934,17 +728,26 @@ static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
     pa_log_debug("Bitpool has changed to %u", sbc_info->sbc.bitpool);
 
     u->read_block_size =
-            (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-            / sbc_info->frame_length * sbc_info->codesize;
+        (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
+        / sbc_info->frame_length * sbc_info->codesize;
 
     u->write_block_size =
-            (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-            / sbc_info->frame_length * sbc_info->codesize;
-    a2dp_set_sink(u);
-//    update_buffer_size(u);
+        (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
+        / sbc_info->frame_length * sbc_info->codesize;
+
+    pa_sink_set_max_request_within_thread(u->sink, u->write_block_size);
+    pa_sink_set_fixed_latency_within_thread(u->sink,
+            FIXED_LATENCY_PLAYBACK_A2DP + pa_bytes_to_usec(u->write_block_size, &u->sample_spec));
+
+    /* If there is still data in the memchunk, we have to discard it
+     * because the write_block_size may have changed. */
+    if (u->write_memchunk.memblock) {
+        pa_memblock_unref(u->write_memchunk.memblock);
+        pa_memchunk_reset(&u->write_memchunk);
+    }
+
+    update_buffer_size(u);
 }
-
-
 
 /* Run from I/O thread */
 static void a2dp_reduce_bitpool(struct userdata *u) {
@@ -1055,46 +858,14 @@ static void transport_config_mtu(struct userdata *u) {
             pa_log_debug("Got invalid write MTU: %lu, rounding down", u->write_block_size);
             u->write_block_size = pa_frame_align(u->write_block_size, &u->sink->sample_spec);
         }
-    } else if(u->transport->codec == A2DP_CODEC_SBC){
+    } else {
         u->read_block_size =
-                (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-                / u->sbc_info.frame_length * u->sbc_info.codesize;
+            (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
+            / u->sbc_info.frame_length * u->sbc_info.codesize;
 
         u->write_block_size =
-                (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-                / u->sbc_info.frame_length * u->sbc_info.codesize;
-    } else if(u->transport->codec == A2DP_CODEC_VENDOR){
-
-        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
-        if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
-            int pkg_size,lsu;
-            int pcm_frequency = u->ldac_info.pcm_frequency;
-            int bytes = u->ldac_info.pcm_fmt == LDACBT_SMPL_FMT_F32 ? 4 : u->ldac_info.pcm_fmt;
-            int channel = u->ldac_info.channel_mode == LDACBT_CHANNEL_MODE_MONO ? 1:2;
-
-            pkg_size = 330;
-
-            if (pcm_frequency == 44100 || pcm_frequency == 48000)
-                lsu = 128;
-            else if (pcm_frequency == 88200 || pcm_frequency == 96000)
-                lsu = 256;
-            else{
-                lsu = 128;
-                pa_log_error("Unknown pcm frequency:%d",pcm_frequency);
-            }
-            u->ldac_info.ldac_frame_size = pkg_size;
-            u->ldac_info.pcm_lsu = lsu;
-            u->ldac_info.pcm_bytes = bytes;
-            u->ldac_info.pcm_channel = channel;
-            u->ldac_info.pcm_read_size = (lsu * bytes * channel);
-            u->write_block_size =
-                    (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-                    /pkg_size * u->ldac_info.pcm_read_size;
-                    // /330 * 512;
-            pa_log_debug("LDAC transport write_block_size=%d pkg_size=%d lsu=%d bytes/sample=%d channel=%d",
-                         (int) u->write_block_size,pkg_size,lsu,bytes,channel);
-
-        }
+            (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
+            / u->sbc_info.frame_length * u->sbc_info.codesize;
     }
 
     if (u->sink) {
@@ -1135,45 +906,8 @@ static void setup_stream(struct userdata *u) {
     pa_log_debug("Stream properly set up, we're ready to roll!");
 
     if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-        if(u->transport->codec == A2DP_CODEC_SBC){
-            a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
-            u->process_render = a2dp_process_render;
-
-        }
-        else if(u->transport->codec == A2DP_CODEC_VENDOR){
-            int ret;
-            a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
-            if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID) {
-                u->ldac_info.layer_specific = 0;
-                u->ldac_info.written = 0;
-                if(u->ldac_info.hLdacBt){
-                    ldacBT_free_handle(u->ldac_info.hLdacBt);
-                }
-                u->ldac_info.hLdacBt = ldacBT_get_handle();
-
-                if(u->ldac_info.hLdacAbr)
-                    ldac_ABR_free_handle(u->ldac_info.hLdacAbr);
-                u->ldac_info.hLdacAbr = ldac_ABR_get_handle();
-
-                ret = ldacBT_init_handle_encode(u->ldac_info.hLdacBt, (int) u->write_link_mtu + AVDT_MEDIA_HDR_SIZE,
-                                                u->ldac_info.eqmid,
-                                                u->ldac_info.channel_mode, u->ldac_info.pcm_fmt,
-                                                u->ldac_info.pcm_frequency);
-                if(ret != 0)
-                    pa_log_warn("Failed to init ldacBT handle");
-
-                ldac_ABR_Init(u->ldac_info.hLdacAbr,
-                              (unsigned int) pa_bytes_to_usec(u->write_block_size, &u->sample_spec) / 1000);
-                ldac_ABR_set_thresholds(u->ldac_info.hLdacAbr, LDAC_ABR_THRESHOLD_CRITICAL,
-                                        LDAC_ABR_THRESHOLD_DANGEROUSTREND, LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ);
-                if(ret != 0)
-                    pa_log_warn("Failed to init ldacBT_ABR handle");
-
-                a2dp_set_sink(u);
-                u->process_render = ldac_process_render;
-            }
-        }
-
+        a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
+        update_buffer_size(u);
     }
 
     u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
@@ -1246,7 +980,7 @@ static int source_set_state_in_io_thread_cb(pa_source *s, pa_source_state_t new_
 
         case PA_SOURCE_SUSPENDED:
             /* Ignore if transition is PA_SOURCE_INIT->PA_SOURCE_SUSPENDED */
-            if (!PA_SOURCE_IS_OPENED(u->source->thread_info.state))
+            if (!PA_SOURCE_IS_OPENED(s->thread_info.state))
                 break;
 
             /* Stop the device if the sink is suspended as well */
@@ -1260,7 +994,7 @@ static int source_set_state_in_io_thread_cb(pa_source *s, pa_source_state_t new_
 
         case PA_SOURCE_IDLE:
         case PA_SOURCE_RUNNING:
-            if (u->source->thread_info.state != PA_SOURCE_SUSPENDED)
+            if (s->thread_info.state != PA_SOURCE_SUSPENDED)
                 break;
 
             /* Resume the device if the sink was suspended as well */
@@ -1297,7 +1031,7 @@ static void source_set_volume_cb(pa_source *s) {
     pa_assert(u->source == s);
 
     if (u->transport->set_microphone_gain == NULL)
-        return;
+      return;
 
     gain = (pa_cvolume_max(&s->real_volume) * HSP_MAX_GAIN) / PA_VOLUME_NORM;
 
@@ -1423,7 +1157,7 @@ static int sink_set_state_in_io_thread_cb(pa_sink *s, pa_sink_state_t new_state,
 
         case PA_SINK_SUSPENDED:
             /* Ignore if transition is PA_SINK_INIT->PA_SINK_SUSPENDED */
-            if (!PA_SINK_IS_OPENED(u->sink->thread_info.state))
+            if (!PA_SINK_IS_OPENED(s->thread_info.state))
                 break;
 
             /* Stop the device if the source is suspended as well */
@@ -1437,7 +1171,7 @@ static int sink_set_state_in_io_thread_cb(pa_sink *s, pa_sink_state_t new_state,
 
         case PA_SINK_IDLE:
         case PA_SINK_RUNNING:
-            if (u->sink->thread_info.state != PA_SINK_SUSPENDED)
+            if (s->thread_info.state != PA_SINK_SUSPENDED)
                 break;
 
             /* Resume the device if the source was suspended as well */
@@ -1471,7 +1205,7 @@ static void sink_set_volume_cb(pa_sink *s) {
     pa_assert(u->sink == s);
 
     if (u->transport->set_speaker_gain == NULL)
-        return;
+      return;
 
     gain = (pa_cvolume_max(&s->real_volume) * HSP_MAX_GAIN) / PA_VOLUME_NORM;
 
@@ -1560,7 +1294,7 @@ static void transport_config(struct userdata *u) {
         u->sample_spec.format = PA_SAMPLE_S16LE;
         u->sample_spec.channels = 1;
         u->sample_spec.rate = 8000;
-    } else if(u->transport && u->transport->codec == A2DP_CODEC_SBC) {
+    } else {
         sbc_info_t *sbc_info = &u->sbc_info;
         a2dp_sbc_t *config;
 
@@ -1667,85 +1401,6 @@ static void transport_config(struct userdata *u) {
         pa_log_info("SBC parameters: allocation=%u, subbands=%u, blocks=%u, bitpool=%u",
                     sbc_info->sbc.allocation, sbc_info->sbc.subbands ? 8 : 4, sbc_info->sbc.blocks, sbc_info->sbc.bitpool);
     }
-#ifdef ENABLE_LDAC
-    else if (u->transport && u->transport->codec == A2DP_CODEC_VENDOR){
-        a2dp_vendor_codec_t * vendor_codec = (a2dp_vendor_codec_t *) u->transport->config;
-        if(vendor_codec->codec_id == LDAC_CODEC_ID && vendor_codec->vendor_id == LDAC_VENDOR_ID){
-            a2dp_ldac_t * config = (a2dp_ldac_t *) vendor_codec;
-            pa_sample_format_t fmt = u->core->default_sample_spec.format;
-
-            pa_assert(u->transport);
-
-            ldac_info_t * ldac_info = &u->ldac_info;
-            ldac_info->hLdacBt = NULL;
-
-            if (fmt == PA_SAMPLE_FLOAT32LE || fmt == PA_SAMPLE_FLOAT32BE) {
-                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_F32;
-                u->sample_spec.format = PA_SAMPLE_FLOAT32LE;
-            } else if (fmt == PA_SAMPLE_S32LE || fmt == PA_SAMPLE_S32BE) {
-                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S32;
-                u->sample_spec.format = PA_SAMPLE_S32LE;
-            } else if (fmt == PA_SAMPLE_S24LE || fmt == PA_SAMPLE_S24BE
-                       || fmt == PA_SAMPLE_S24_32LE || fmt == PA_SAMPLE_S24_32BE) {
-                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S24;
-                u->sample_spec.format = PA_SAMPLE_S24LE;
-            } else {
-                ldac_info->pcm_fmt = LDACBT_SMPL_FMT_S16;
-                u->sample_spec.format = PA_SAMPLE_S16LE;
-            }
-
-            switch (config->frequency) {
-                case LDACBT_SAMPLING_FREQ_044100:
-                    ldac_info->pcm_frequency = 44100u;
-                    u->sample_spec.rate = 44100U;
-                    break;
-                case LDACBT_SAMPLING_FREQ_048000:
-                    ldac_info->pcm_frequency = 48000u;
-                    u->sample_spec.rate = 48000U;
-                    break;
-                case LDACBT_SAMPLING_FREQ_088200:
-                    ldac_info->pcm_frequency = 88200u;
-                    u->sample_spec.rate = 88200U;
-                    break;
-                case LDACBT_SAMPLING_FREQ_096000:
-                    ldac_info->pcm_frequency = 96000u;
-                    u->sample_spec.rate = 96000U;
-                    break;
-                default:
-                    pa_assert_not_reached();
-            }
-
-            switch (config->channel_mode) {
-                case LDACBT_CHANNEL_MODE_MONO:
-                    ldac_info->channel_mode = LDACBT_CHANNEL_MODE_MONO;
-                    u->sample_spec.channels = 1;
-                    break;
-                case LDACBT_CHANNEL_MODE_DUAL_CHANNEL:
-                    ldac_info->channel_mode = LDACBT_CHANNEL_MODE_DUAL_CHANNEL;
-                    u->sample_spec.channels = 2;
-                    break;
-                case LDACBT_CHANNEL_MODE_STEREO:
-                    ldac_info->channel_mode = LDACBT_CHANNEL_MODE_STEREO;
-                    u->sample_spec.channels = 2;
-                    break;
-
-                default:
-                    pa_assert_not_reached();
-            }
-
-            if(u->discovery->ldac_eqmid == LDACBT_EQMID_ABR){
-                ldac_info->eqmid = LDACBT_EQMID_HQ;
-                ldac_info->enable_abr = true;
-            } else {
-                ldac_info->eqmid = u->discovery->ldac_eqmid;
-                ldac_info->enable_abr = false;
-            }
-
-
-
-        }
-    }
-#endif
 }
 
 /* Run from main thread */
@@ -1783,11 +1438,11 @@ static int setup_transport(struct userdata *u) {
 /* Run from main thread */
 static pa_direction_t get_profile_direction(pa_bluetooth_profile_t p) {
     static const pa_direction_t profile_direction[] = {
-            [PA_BLUETOOTH_PROFILE_A2DP_SINK] = PA_DIRECTION_OUTPUT,
-            [PA_BLUETOOTH_PROFILE_A2DP_SOURCE] = PA_DIRECTION_INPUT,
-            [PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
-            [PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
-            [PA_BLUETOOTH_PROFILE_OFF] = 0
+        [PA_BLUETOOTH_PROFILE_A2DP_SINK] = PA_DIRECTION_OUTPUT,
+        [PA_BLUETOOTH_PROFILE_A2DP_SOURCE] = PA_DIRECTION_INPUT,
+        [PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
+        [PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
+        [PA_BLUETOOTH_PROFILE_OFF] = 0
     };
 
     return profile_direction[p];
@@ -1816,14 +1471,13 @@ static int init_profile(struct userdata *u) {
 }
 
 static int write_block(struct userdata *u) {
-    int n_written = -1;
+    int n_written;
 
     if (u->write_index <= 0)
         u->started_at = pa_rtclock_now();
 
     if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-            n_written = u->process_render(u);
-        if ((n_written) < 0)
+        if ((n_written = a2dp_process_render(u)) < 0)
             return -1;
     } else {
         if ((n_written = sco_process_render(u)) < 0)
@@ -1839,10 +1493,6 @@ static void thread_func(void *userdata) {
     struct userdata *u = userdata;
     unsigned blocks_to_write = 0;
     unsigned bytes_to_write = 0;
-    int min_skip_blocks = 2;
-    pa_usec_t ldac_last_tx_log_at = 0;
-    uint32_t ldac_last_tx_bytes = 0;
-    size_t skip_bytes_add = 0;
 
     pa_assert(u);
     pa_assert(u->transport);
@@ -1857,8 +1507,6 @@ static void thread_func(void *userdata) {
     /* Setup the stream only if the transport was already acquired */
     if (u->transport_acquired)
         setup_stream(u);
-    if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr)
-        min_skip_blocks = LDAC_SKIP_BLOCK;
 
     for (;;) {
         struct pollfd *pollfd;
@@ -1956,7 +1604,7 @@ static void thread_func(void *userdata) {
                             writable = false;
                     }
 
-                    /* There is no source, we have to use the system clock for timing */
+                /* There is no source, we have to use the system clock for timing */
                 } else {
                     bool have_written = false;
                     pa_usec_t time_passed = 0;
@@ -1966,31 +1614,27 @@ static void thread_func(void *userdata) {
                         time_passed = pa_rtclock_now() - u->started_at;
                         audio_sent = pa_bytes_to_usec(u->write_index, &u->sample_spec);
                     }
-                    size_t bytes_to_send =(time_passed > audio_sent)? pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec):0;
-
-
-
 
                     /* A new block needs to be sent. */
                     if (audio_sent <= time_passed) {
+                        size_t bytes_to_send = pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec);
 
                         /* There are more than two blocks that need to be written. It seems that
                          * the socket has not been accepting data fast enough (could be due to
                          * hiccups in the wireless transmission). We need to discard everything
-                         * older than two block sizes (or more) to keep the latency from growing. */
-
-                        if (bytes_to_send > min_skip_blocks * u->write_block_size) {
+                         * older than two block sizes to keep the latency from growing. */
+                        if (bytes_to_send > 2 * u->write_block_size) {
                             uint64_t skip_bytes;
                             pa_memchunk tmp;
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = (bytes_to_send / u->write_block_size) * u->write_block_size;
+                            skip_bytes = bytes_to_send - 2 * u->write_block_size;
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",
-                                         (unsigned long long) skip_usec,
-                                         (unsigned long long) skip_bytes);
+                                        (unsigned long long) skip_usec,
+                                        (unsigned long long) skip_bytes);
 
                             while (skip_bytes > 0) {
                                 size_t bytes_to_render;
@@ -2006,11 +1650,8 @@ static void thread_func(void *userdata) {
                                 skip_bytes -= bytes_to_render;
                             }
 
-                            if (u->write_index > 0 && u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK && u->transport->codec == A2DP_CODEC_SBC)
+                            if (u->write_index > 0 && u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK)
                                 a2dp_reduce_bitpool(u);
-
-                            if (!writable)
-                                skip_bytes_add += skip_bytes;
                         }
 
                         blocks_to_write = 1;
@@ -2019,25 +1660,6 @@ static void thread_func(void *userdata) {
                     /* If the stream is writable, send some data if necessary */
                     if (writable && blocks_to_write > 0) {
                         int result;
-
-                        if(u->ldac_info.hLdacBt && u->ldac_info.hLdacAbr && u->ldac_info.enable_abr){
-                            ldac_ABR_Proc(u->ldac_info.hLdacBt, u->ldac_info.hLdacAbr,
-                                          (bytes_to_send + skip_bytes_add) * LDAC_TX_LENGTH_FACTOR / u->write_block_size,
-                                          u->ldac_info.enable_abr);
-                            skip_bytes_add = 0;
-                        }
-
-                        if (u->ldac_info.hLdacBt && time_passed - ldac_last_tx_log_at >= 1000000 * LDAC_SPEED_LOG_INTERVAL_SEC) {
-                            static const int aEqmidToAbrQualityModeID[]={ 0, 1, 4, 2, 3};
-                            pa_log_debug("LDAC Transmission:: Average Speed: %.2fKbps, Speed(%d sec): %.2fKbps; QualityModeId: %d",
-                                        u->ldac_info.written * 8 / (time_passed / 1000.0),
-                                        LDAC_SPEED_LOG_INTERVAL_SEC,
-                                        (u->ldac_info.written - ldac_last_tx_bytes) * 8 /
-                                        ((time_passed - ldac_last_tx_log_at) / 1000.0),
-                                         aEqmidToAbrQualityModeID[ldacBT_get_eqmid(u->ldac_info.hLdacBt)]);
-                            ldac_last_tx_log_at = time_passed;
-                            ldac_last_tx_bytes = u->ldac_info.written;
-                        }
 
                         if ((result = write_block(u)) < 0)
                             goto fail;
@@ -2051,9 +1673,9 @@ static void thread_func(void *userdata) {
                     /* If nothing was written during this iteration, either the stream
                      * is not writable or there was no write pending. Set up a timer that
                      * will wake up the thread when the next data needs to be written. */
-                    pa_usec_t sleep_for;
-                    pa_usec_t next_write_at;
                     if (!have_written) {
+                        pa_usec_t sleep_for;
+                        pa_usec_t next_write_at;
 
                         if (writable) {
                             /* There was no write pending on this iteration of the loop.
@@ -2065,15 +1687,11 @@ static void thread_func(void *userdata) {
                             /* We could not write because the stream was not ready. Let's try
                              * again in 500 ms and drop audio if we still can't write. The
                              * thread will also be woken up when we can write again. */
-                            sleep_for = PA_USEC_PER_MSEC * 20;
+                            sleep_for = PA_USEC_PER_MSEC * 500;
 
-                    } else {
-                        next_write_at = pa_bytes_to_usec(u->write_index, &u->sample_spec);
-                        sleep_for = time_passed < next_write_at ? next_write_at - time_passed : 0;
+                        pa_rtpoll_set_timer_relative(u->rtpoll, sleep_for);
+                        disable_timer = false;
                     }
-                    pa_rtpoll_set_timer_relative(u->rtpoll, sleep_for);
-                    disable_timer = false;
-
                 }
             }
 
@@ -2089,8 +1707,6 @@ static void thread_func(void *userdata) {
             pa_log_debug("pa_rtpoll_run failed with: %d", ret);
             goto fail;
         }
-        /* timer should be disabled after pa_rtpoll_run() ? */
-        pa_rtpoll_set_timer_disabled(u->rtpoll);
 
         if (ret == 0) {
             pa_log_debug("IO thread shutdown requested, stopping cleanly");
@@ -2099,13 +1715,13 @@ static void thread_func(void *userdata) {
         }
     }
 
-    fail:
+fail:
     /* If this was no regular exit from the loop we have to continue processing messages until we receive PA_MESSAGE_SHUTDOWN */
     pa_log_debug("IO thread failed");
     pa_asyncmsgq_post(pa_thread_mq_get()->outq, PA_MSGOBJECT(u->msg), BLUETOOTH_MESSAGE_IO_THREAD_FAILED, NULL, 0, NULL, NULL);
     pa_asyncmsgq_wait_for(u->thread_mq.inq, PA_MESSAGE_SHUTDOWN);
 
-    finish:
+finish:
     pa_log_debug("IO thread shutting down");
 }
 
@@ -2363,58 +1979,58 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
     name = pa_bluetooth_profile_to_string(profile);
 
     switch (profile) {
-        case PA_BLUETOOTH_PROFILE_A2DP_SINK:
-            cp = pa_card_profile_new(name, _("High Fidelity Playback (A2DP Sink)"), sizeof(pa_bluetooth_profile_t));
-            cp->priority = 40;
-            cp->n_sinks = 1;
-            cp->n_sources = 0;
-            cp->max_sink_channels = 2;
-            cp->max_source_channels = 0;
-            pa_hashmap_put(output_port->profiles, cp->name, cp);
+    case PA_BLUETOOTH_PROFILE_A2DP_SINK:
+        cp = pa_card_profile_new(name, _("High Fidelity Playback (A2DP Sink)"), sizeof(pa_bluetooth_profile_t));
+        cp->priority = 40;
+        cp->n_sinks = 1;
+        cp->n_sources = 0;
+        cp->max_sink_channels = 2;
+        cp->max_source_channels = 0;
+        pa_hashmap_put(output_port->profiles, cp->name, cp);
 
-            p = PA_CARD_PROFILE_DATA(cp);
-            break;
+        p = PA_CARD_PROFILE_DATA(cp);
+        break;
 
-        case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
-            cp = pa_card_profile_new(name, _("High Fidelity Capture (A2DP Source)"), sizeof(pa_bluetooth_profile_t));
-            cp->priority = 20;
-            cp->n_sinks = 0;
-            cp->n_sources = 1;
-            cp->max_sink_channels = 0;
-            cp->max_source_channels = 2;
-            pa_hashmap_put(input_port->profiles, cp->name, cp);
+    case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
+        cp = pa_card_profile_new(name, _("High Fidelity Capture (A2DP Source)"), sizeof(pa_bluetooth_profile_t));
+        cp->priority = 20;
+        cp->n_sinks = 0;
+        cp->n_sources = 1;
+        cp->max_sink_channels = 0;
+        cp->max_source_channels = 2;
+        pa_hashmap_put(input_port->profiles, cp->name, cp);
 
-            p = PA_CARD_PROFILE_DATA(cp);
-            break;
+        p = PA_CARD_PROFILE_DATA(cp);
+        break;
 
-        case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
-            cp = pa_card_profile_new(name, _("Headset Head Unit (HSP/HFP)"), sizeof(pa_bluetooth_profile_t));
-            cp->priority = 30;
-            cp->n_sinks = 1;
-            cp->n_sources = 1;
-            cp->max_sink_channels = 1;
-            cp->max_source_channels = 1;
-            pa_hashmap_put(input_port->profiles, cp->name, cp);
-            pa_hashmap_put(output_port->profiles, cp->name, cp);
+    case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+        cp = pa_card_profile_new(name, _("Headset Head Unit (HSP/HFP)"), sizeof(pa_bluetooth_profile_t));
+        cp->priority = 30;
+        cp->n_sinks = 1;
+        cp->n_sources = 1;
+        cp->max_sink_channels = 1;
+        cp->max_source_channels = 1;
+        pa_hashmap_put(input_port->profiles, cp->name, cp);
+        pa_hashmap_put(output_port->profiles, cp->name, cp);
 
-            p = PA_CARD_PROFILE_DATA(cp);
-            break;
+        p = PA_CARD_PROFILE_DATA(cp);
+        break;
 
-        case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
-            cp = pa_card_profile_new(name, _("Headset Audio Gateway (HSP/HFP)"), sizeof(pa_bluetooth_profile_t));
-            cp->priority = 10;
-            cp->n_sinks = 1;
-            cp->n_sources = 1;
-            cp->max_sink_channels = 1;
-            cp->max_source_channels = 1;
-            pa_hashmap_put(input_port->profiles, cp->name, cp);
-            pa_hashmap_put(output_port->profiles, cp->name, cp);
+    case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+        cp = pa_card_profile_new(name, _("Headset Audio Gateway (HSP/HFP)"), sizeof(pa_bluetooth_profile_t));
+        cp->priority = 10;
+        cp->n_sinks = 1;
+        cp->n_sources = 1;
+        cp->max_sink_channels = 1;
+        cp->max_source_channels = 1;
+        pa_hashmap_put(input_port->profiles, cp->name, cp);
+        pa_hashmap_put(output_port->profiles, cp->name, cp);
 
-            p = PA_CARD_PROFILE_DATA(cp);
-            break;
+        p = PA_CARD_PROFILE_DATA(cp);
+        break;
 
-        case PA_BLUETOOTH_PROFILE_OFF:
-            pa_assert_not_reached();
+    case PA_BLUETOOTH_PROFILE_OFF:
+        pa_assert_not_reached();
     }
 
     *p = profile;
@@ -2423,7 +2039,7 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         cp->available = transport_state_to_availability(u->device->transports[*p]->state);
     else
         cp->available = PA_AVAILABLE_NO;
-    pa_log_debug("set cp->available u->device->transports[*p]?%c",u->device->transports[*p]?'y':'n');
+
     return cp;
 }
 
@@ -2461,7 +2077,7 @@ static int set_profile_cb(pa_card *c, pa_card_profile *new_profile) {
 
     return 0;
 
-    off:
+off:
     stop_thread(u);
 
     pa_assert_se(pa_card_set_profile(u->card, pa_hashmap_get(u->card->profiles, "off"), false) >= 0);
@@ -2678,7 +2294,7 @@ static pa_hook_result_t transport_speaker_gain_changed_cb(pa_bluetooth_discovery
     pa_assert(u);
 
     if (t != u->transport)
-        return PA_HOOK_OK;
+      return PA_HOOK_OK;
 
     gain = t->speaker_gain;
     volume = (pa_volume_t) (gain * PA_VOLUME_NORM / HSP_MAX_GAIN);
@@ -2705,7 +2321,7 @@ static pa_hook_result_t transport_microphone_gain_changed_cb(pa_bluetooth_discov
     pa_assert(u);
 
     if (t != u->transport)
-        return PA_HOOK_OK;
+      return PA_HOOK_OK;
 
     gain = t->microphone_gain;
     volume = (pa_volume_t) (gain * PA_VOLUME_NORM / HSP_MAX_GAIN);
@@ -2801,18 +2417,18 @@ int pa__init(pa_module* m) {
     pa_modargs_free(ma);
 
     u->device_connection_changed_slot =
-            pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_DEVICE_CONNECTION_CHANGED),
-                            PA_HOOK_NORMAL, (pa_hook_cb_t) device_connection_changed_cb, u);
+        pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_DEVICE_CONNECTION_CHANGED),
+                        PA_HOOK_NORMAL, (pa_hook_cb_t) device_connection_changed_cb, u);
 
     u->transport_state_changed_slot =
-            pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_STATE_CHANGED),
-                            PA_HOOK_NORMAL, (pa_hook_cb_t) transport_state_changed_cb, u);
+        pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_STATE_CHANGED),
+                        PA_HOOK_NORMAL, (pa_hook_cb_t) transport_state_changed_cb, u);
 
     u->transport_speaker_gain_changed_slot =
-            pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_SPEAKER_GAIN_CHANGED), PA_HOOK_NORMAL, (pa_hook_cb_t) transport_speaker_gain_changed_cb, u);
+        pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_SPEAKER_GAIN_CHANGED), PA_HOOK_NORMAL, (pa_hook_cb_t) transport_speaker_gain_changed_cb, u);
 
     u->transport_microphone_gain_changed_slot =
-            pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_MICROPHONE_GAIN_CHANGED), PA_HOOK_NORMAL, (pa_hook_cb_t) transport_microphone_gain_changed_cb, u);
+        pa_hook_connect(pa_bluetooth_discovery_hook(u->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_MICROPHONE_GAIN_CHANGED), PA_HOOK_NORMAL, (pa_hook_cb_t) transport_microphone_gain_changed_cb, u);
 
     if (add_card(u) < 0)
         goto fail;
@@ -2834,19 +2450,19 @@ int pa__init(pa_module* m) {
 
     return 0;
 
-    off:
+off:
     stop_thread(u);
 
     pa_assert_se(pa_card_set_profile(u->card, pa_hashmap_get(u->card->profiles, "off"), false) >= 0);
 
     return 0;
 
-    fail_free_modargs:
+fail_free_modargs:
 
     if (ma)
         pa_modargs_free(ma);
 
-    fail:
+fail:
 
     pa__done(m);
 
@@ -2880,15 +2496,6 @@ void pa__done(pa_module *m) {
 
     if (u->sbc_info.sbc_initialized)
         sbc_finish(&u->sbc_info.sbc);
-
-    if (u->ldac_info.buffer)
-        pa_xfree(u->ldac_info.buffer);
-
-    if (u->ldac_info.hLdacBt)
-        ldacBT_free_handle(u->ldac_info.hLdacBt);
-
-    if (u->ldac_info.hLdacAbr)
-        ldac_ABR_free_handle(u->ldac_info.hLdacAbr);
 
     if (u->msg)
         pa_xfree(u->msg);

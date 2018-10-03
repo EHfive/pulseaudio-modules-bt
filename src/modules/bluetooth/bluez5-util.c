@@ -348,6 +348,50 @@ void pa_bluetooth_transport_free(pa_bluetooth_transport *t) {
     pa_xfree(t);
 }
 
+static int bluez5_transport_set_property(pa_bluetooth_transport *t, const char *prop_name, int prop_type, void *prop_value){
+    DBusMessage *m, *r;
+    DBusError err;
+    DBusMessageIter i;
+    const char * interface = BLUEZ_MEDIA_TRANSPORT_INTERFACE;
+
+    pa_log_debug("Setting property, Owner: %s; Path: %s; Property: %s",t->owner, t->path, prop_name);
+
+    pa_assert(t);
+    pa_assert(t->device);
+    pa_assert(t->device->discovery);
+
+    dbus_error_init(&err);
+
+    pa_assert_se(m = dbus_message_new_method_call(t->owner, t->path, "org.freedesktop.DBus.Properties", "Set"));
+
+    dbus_message_iter_init_append(m, &i);
+
+    pa_assert_se(dbus_message_iter_append_basic(&i, DBUS_TYPE_STRING, &interface));
+    pa_assert_se(dbus_message_iter_append_basic(&i, DBUS_TYPE_STRING, &prop_name));
+    pa_dbus_append_basic_variant(&i, prop_type, prop_value);
+
+    r = dbus_connection_send_with_reply_and_block(pa_dbus_connection_get(t->device->discovery->connection), m, -1, &err);
+    dbus_message_unref(m);
+    m = NULL;
+    if(r) {
+        dbus_message_unref(r);
+        r = NULL;
+    }
+
+    if(dbus_error_is_set(&err)) {
+        pa_log_debug("Failed to set property \"%s.%s\"", interface, prop_name);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int bluez5_transport_set_volume(pa_bluetooth_transport *t, uint16_t volume){
+    if(t->a2dp_gain == volume)
+        return 0;
+    return bluez5_transport_set_property(t, "Volume", DBUS_TYPE_UINT16, &volume);
+}
+
 static int bluez5_transport_acquire_cb(pa_bluetooth_transport *t, bool optional, size_t *imtu, size_t *omtu) {
     DBusMessage *m, *r;
     DBusError err;
@@ -441,6 +485,14 @@ bool pa_bluetooth_device_any_transport_connected(const pa_bluetooth_device *d) {
     return false;
 }
 
+void pa_transport_set_a2dp_gain(pa_bluetooth_transport *t, uint16_t a2dp_gain){
+    if(t->a2dp_gain == a2dp_gain)
+        return;
+    t->a2dp_gain = a2dp_gain;
+    pa_hook_fire(pa_bluetooth_discovery_hook(t->device->discovery, PA_BLUETOOTH_HOOK_TRANSPORT_A2DP_GAIN_CHANGED), t);
+}
+
+
 static int transport_state_from_string(const char* value, pa_bluetooth_transport_state_t *state) {
     pa_assert(value);
     pa_assert(state);
@@ -481,6 +533,18 @@ static void parse_transport_property(pa_bluetooth_transport *t, DBusMessageIter 
                 }
 
                 pa_bluetooth_transport_set_state(t, state);
+            }
+
+            break;
+        }
+        case DBUS_TYPE_UINT16: {
+
+            uint16_t value;
+            dbus_message_iter_get_basic(&variant_i, &value);
+
+            if (pa_streq(key, "Volume")) {
+                pa_log_debug("Transport Volume Changed to %u ", value);
+                pa_transport_set_a2dp_gain(t, value);
             }
 
             break;
@@ -1468,6 +1532,7 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
     t = pa_bluetooth_transport_new(d, sender, path, p, config, size);
     t->acquire = bluez5_transport_acquire_cb;
     t->release = bluez5_transport_release_cb;
+    t->set_volume = bluez5_transport_set_volume;
     pa_bluetooth_transport_put(t);
 
     pa_log_debug("Transport %s available for profile %s", t->path, pa_bluetooth_profile_to_string(t->profile));

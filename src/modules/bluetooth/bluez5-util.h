@@ -47,6 +47,7 @@ typedef enum pa_bluetooth_hook {
     PA_BLUETOOTH_HOOK_TRANSPORT_STATE_CHANGED,            /* Call data: pa_bluetooth_transport */
     PA_BLUETOOTH_HOOK_TRANSPORT_MICROPHONE_GAIN_CHANGED,  /* Call data: pa_bluetooth_transport */
     PA_BLUETOOTH_HOOK_TRANSPORT_SPEAKER_GAIN_CHANGED,     /* Call data: pa_bluetooth_transport */
+    PA_BLUETOOTH_HOOK_TRANSPORT_A2DP_GAIN_CHANGED,        /* Call data: pa_bluetooth_transport */
     PA_BLUETOOTH_HOOK_MAX
 } pa_bluetooth_hook_t;
 
@@ -70,6 +71,7 @@ typedef void (*pa_bluetooth_transport_release_cb)(pa_bluetooth_transport *t);
 typedef void (*pa_bluetooth_transport_destroy_cb)(pa_bluetooth_transport *t);
 typedef void (*pa_bluetooth_transport_set_speaker_gain_cb)(pa_bluetooth_transport *t, uint16_t gain);
 typedef void (*pa_bluetooth_transport_set_microphone_gain_cb)(pa_bluetooth_transport *t, uint16_t gain);
+typedef int (*pa_bluetooth_transport_set_volume_cb)(pa_bluetooth_transport *t, uint16_t volume);
 
 struct pa_bluetooth_transport {
     pa_bluetooth_device *device;
@@ -84,6 +86,7 @@ struct pa_bluetooth_transport {
 
     uint16_t microphone_gain;
     uint16_t speaker_gain;
+    uint16_t a2dp_gain;
 
     pa_bluetooth_transport_state_t state;
 
@@ -92,6 +95,7 @@ struct pa_bluetooth_transport {
     pa_bluetooth_transport_destroy_cb destroy;
     pa_bluetooth_transport_set_speaker_gain_cb set_speaker_gain;
     pa_bluetooth_transport_set_microphone_gain_cb set_microphone_gain;
+    pa_bluetooth_transport_set_volume_cb set_volume;
     void *userdata;
 };
 

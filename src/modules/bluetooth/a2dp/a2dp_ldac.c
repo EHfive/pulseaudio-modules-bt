@@ -1,8 +1,13 @@
-#include <ldacBT_abr.h>
+
 #include <arpa/inet.h>
 #include <string.h>
 
+#include <ldacBT.h>
+#include <ldacBT_abr.h>
+
 #include "a2dp-api.h"
+
+#include "ldac_libs.c"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
@@ -43,8 +48,7 @@ typedef struct ldac_info {
 } ldac_info_t;
 
 static bool pa_ldac_encoder_load() {
-    /* LDAC libs statically linked */
-    return true;
+    return ldac_encoder_load();
 }
 
 static bool
@@ -54,7 +58,8 @@ pa_ldac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_f
     info->read_pcm = read_cb;
     info->read_buf_free = free_cb;
     info->eqmid = LDACBT_EQMID_HQ;
-    info->enable_abr = true;
+    if(ldac_abr_loaded)
+        info->enable_abr = true;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
     return true;
 }
@@ -65,6 +70,8 @@ static int pa_ldac_update_user_config(pa_proplist *user_config, void **codec_dat
     int ret = 0;
     ldac_eqmid_str = pa_proplist_gets(user_config, "ldac_eqmid");
     ldac_fmt_str = pa_proplist_gets(user_config, "ldac_fmt");
+
+    pa_log_debug("LDAC ABR library loaded: %s",ldac_abr_loaded?"true":"false");
 
     if (ldac_eqmid_str) {
         if (streq(ldac_eqmid_str, "hq")) {
@@ -82,7 +89,8 @@ static int pa_ldac_update_user_config(pa_proplist *user_config, void **codec_dat
         } else if (streq(ldac_eqmid_str, "auto") ||
                    streq(ldac_eqmid_str, "abr")) {
             i->eqmid = LDACBT_EQMID_HQ;
-            i->enable_abr = true;
+            if(ldac_abr_loaded)
+                i->enable_abr = true;
             ret++;
         } else {
             pa_log("ldac_eqmid parameter must be either hq, sq, mq, or auto/abr (found %s)", ldac_eqmid_str);
@@ -129,7 +137,7 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
 
 
     if (ldac_info->hLdacAbr && ldac_info->enable_abr) {
-        ldac_ABR_Proc(ldac_info->hLdacBt, ldac_info->hLdacAbr,
+        ldac_ABR_Proc_func(ldac_info->hLdacBt, ldac_info->hLdacAbr,
                       (unsigned int) (ldac_info->tx_length / ldac_info->q_write_block_size),
                       (unsigned int) ldac_info->enable_abr);
     }
@@ -157,14 +165,14 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         int ret_code;
         ldac_info->read_pcm(&p, (size_t) ldac_enc_read, read_cb_data);
 
-        ret_code = ldacBT_encode(ldac_info->hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
+        ret_code = ldacBT_encode_func(ldac_info->hLdacBt, (void *) p, &encoded, (uint8_t *) d, &written, &ldac_frame_num);
 
         ldac_info->read_buf_free(&p, read_cb_data);
 
         if (PA_UNLIKELY(ret_code < 0)) {
             pa_log_error("LDAC encoding error, written:%d encoded:%d ldac_frame_num:%d", written, encoded,
                          ldac_frame_num);
-            int err = ldacBT_get_error_code(ldac_info->hLdacBt);
+            int err = ldacBT_get_error_code_func(ldac_info->hLdacBt);
             pa_log_error("LDACBT_API_ERR:%d  LDACBT_HANDLE_ERR:%d  LDACBT_BLOCK_ERR:%d", LDACBT_API_ERR(err),
                          LDACBT_HANDLE_ERR(err), LDACBT_BLOCK_ERR(err));
             *_encoded = 0;
@@ -187,7 +195,7 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
 
     PA_ONCE_BEGIN
                 {
-                    const int v = ldacBT_get_version();
+                    const int v = ldacBT_get_version_func();
                     pa_log_notice("Using LDAC library: version: %x.%02x.%02x",
                                   v >> 16,
                                   (v >> 8) & 0x0ff,
@@ -356,14 +364,11 @@ static void pa_ldac_setup_stream(void **codec_data) {
     ldac_info->layer_specific = 0;
     ldac_info->written = 0;
     if (ldac_info->hLdacBt)
-        ldacBT_free_handle(ldac_info->hLdacBt);
-    ldac_info->hLdacBt = ldacBT_get_handle();
+        ldacBT_free_handle_func(ldac_info->hLdacBt);
+    ldac_info->hLdacBt = ldacBT_get_handle_func();
 
-    if (ldac_info->hLdacAbr)
-        ldac_ABR_free_handle(ldac_info->hLdacAbr);
-    ldac_info->hLdacAbr = ldac_ABR_get_handle();
 
-    ret = ldacBT_init_handle_encode(ldac_info->hLdacBt,
+    ret = ldacBT_init_handle_encode_func(ldac_info->hLdacBt,
                                     (int) ldac_info->mtu + AVDT_MEDIA_HDR_SIZE,
                                     ldac_info->eqmid,
                                     ldac_info->channel_mode,
@@ -374,22 +379,31 @@ static void pa_ldac_setup_stream(void **codec_data) {
         goto fail;
     }
 
-    ret = ldac_ABR_Init(ldac_info->hLdacAbr,
+    if (!ldac_abr_loaded)
+        return;
+
+    if (ldac_info->hLdacAbr)
+        ldac_ABR_free_handle_func(ldac_info->hLdacAbr);
+    ldac_info->hLdacAbr = ldac_ABR_get_handle_func();
+
+    ret = ldac_ABR_Init_func(ldac_info->hLdacAbr,
                         (unsigned int) pa_bytes_to_usec(ldac_info->q_write_block_size, &ldac_info->sample_spec) / 1000);
     if (ret != 0) {
         pa_log_warn("Failed to init ldacBT_ABR handle");
         goto fail1;
     }
 
-    ldac_ABR_set_thresholds(ldac_info->hLdacAbr, LDAC_ABR_THRESHOLD_CRITICAL,
+    ldac_ABR_set_thresholds_func(ldac_info->hLdacAbr, LDAC_ABR_THRESHOLD_CRITICAL,
                             LDAC_ABR_THRESHOLD_DANGEROUSTREND, LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ);
     return;
 
 fail:
-    ldacBT_free_handle(ldac_info->hLdacBt);
+    ldacBT_free_handle_func(ldac_info->hLdacBt);
     ldac_info->hLdacBt = NULL;
+    if (!ldac_abr_loaded)
+        return;
 fail1:
-    ldac_ABR_free_handle(ldac_info->hLdacAbr);
+    ldac_ABR_free_handle_func(ldac_info->hLdacAbr);
     ldac_info->hLdacAbr = NULL;
     ldac_info->enable_abr = false;
 };
@@ -406,10 +420,10 @@ static void pa_ldac_free(void **codec_data) {
         return;
 
     if (ldac_info->hLdacBt)
-        ldacBT_free_handle(ldac_info->hLdacBt);
+        ldacBT_free_handle_func(ldac_info->hLdacBt);
 
-    if (ldac_info->hLdacAbr)
-        ldac_ABR_free_handle(ldac_info->hLdacAbr);
+    if (ldac_info->hLdacAbr && ldac_abr_loaded)
+        ldac_ABR_free_handle_func(ldac_info->hLdacAbr);
 
     pa_xfree(ldac_info);
     *codec_data = NULL;

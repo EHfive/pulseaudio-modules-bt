@@ -22,6 +22,8 @@
 
 #include <pulsecore/core.h>
 
+#include "a2dp-api.h"
+
 #define PA_BLUETOOTH_UUID_A2DP_SOURCE "0000110a-0000-1000-8000-00805f9b34fb"
 #define PA_BLUETOOTH_UUID_A2DP_SINK   "0000110b-0000-1000-8000-00805f9b34fb"
 
@@ -77,6 +79,10 @@ struct pa_bluetooth_transport {
     char *owner;
     char *path;
     pa_bluetooth_profile_t profile;
+
+    const pa_a2dp_codec_t *a2dp_codec;
+    pa_a2dp_sink_t *a2dp_sink;
+    pa_a2dp_source_t *a2dp_source;
 
     uint8_t codec;
     uint8_t *config;

@@ -2116,8 +2116,13 @@ module_bluetooth_discover_la_CFLAGS = $(AM_CFLAGS) -DPA_MODULE_NAME=module_bluet
 # Bluetooth BlueZ 5 sink / source
 libbluez5_util_la_SOURCES = \
 		modules/bluetooth/bluez5-util.c \
+		modules/bluetooth/a2dp/a2dp_util.c \
+		modules/bluetooth/a2dp/a2dp_sbc.c \
+		modules/bluetooth/a2dp/a2dp_ldac.c \
 		modules/bluetooth/bluez5-util.h \
 		modules/bluetooth/a2dp-codecs.h
+		modules/bluetooth/a2dp-codecs.h \
+		modules/bluetooth/a2dp-api.h \
 if HAVE_BLUEZ_5_OFONO_HEADSET
 libbluez5_util_la_SOURCES += \
 		modules/bluetooth/backend-ofono.c

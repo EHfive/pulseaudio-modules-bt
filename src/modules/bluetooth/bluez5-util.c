@@ -33,7 +33,8 @@
 #include <pulsecore/refcnt.h>
 #include <pulsecore/shared.h>
 
-#include "a2dp-codecs.h"
+#include "a2dp-api.h"
+#include "ldacBT.h"
 
 #include "bluez5-util.h"
 
@@ -48,8 +49,6 @@
 
 #define BLUEZ_ERROR_NOT_SUPPORTED "org.bluez.Error.NotSupported"
 
-#define A2DP_SOURCE_ENDPOINT "/MediaEndpoint/A2DPSource"
-#define A2DP_SINK_ENDPOINT "/MediaEndpoint/A2DPSink"
 
 #define ENDPOINT_INTROSPECT_XML                                         \
     DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE                           \
@@ -88,6 +87,8 @@ struct pa_bluetooth_discovery {
     pa_hashmap *adapters;
     pa_hashmap *devices;
     pa_hashmap *transports;
+
+    pa_a2dp_config_t *a2dp_config;
 
     int headset_backend;
     pa_bluetooth_backend *ofono_backend, *native_backend;
@@ -888,7 +889,9 @@ finish:
 static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const char *endpoint, const char *uuid) {
     DBusMessage *m;
     DBusMessageIter i, d;
-    uint8_t codec = 0;
+    uint8_t codec;
+    pa_a2dp_codec_index_t index;
+    const pa_a2dp_codec_t *a2dp_codec;
 
     pa_log_debug("Registering %s on adapter %s", endpoint, path);
 
@@ -899,22 +902,23 @@ static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const
     dbus_message_iter_open_container(&i, DBUS_TYPE_ARRAY, DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING DBUS_TYPE_STRING_AS_STRING
                                          DBUS_TYPE_VARIANT_AS_STRING DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &d);
     pa_dbus_append_basic_variant_dict_entry(&d, "UUID", DBUS_TYPE_STRING, &uuid);
+
+    pa_a2dp_endpoint_to_codec_index(endpoint, &index);
+    pa_a2dp_codec_index_to_a2dp_codec(index, &a2dp_codec);
+
+    if(!a2dp_codec)
+        return;
+
+    codec = a2dp_codec->codec;
+
     pa_dbus_append_basic_variant_dict_entry(&d, "Codec", DBUS_TYPE_BYTE, &codec);
 
     if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SOURCE) || pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SINK)) {
-        a2dp_sbc_t capabilities;
-
-        capabilities.channel_mode = SBC_CHANNEL_MODE_MONO | SBC_CHANNEL_MODE_DUAL_CHANNEL | SBC_CHANNEL_MODE_STEREO |
-                                    SBC_CHANNEL_MODE_JOINT_STEREO;
-        capabilities.frequency = SBC_SAMPLING_FREQ_16000 | SBC_SAMPLING_FREQ_32000 | SBC_SAMPLING_FREQ_44100 |
-                                 SBC_SAMPLING_FREQ_48000;
-        capabilities.allocation_method = SBC_ALLOCATION_SNR | SBC_ALLOCATION_LOUDNESS;
-        capabilities.subbands = SBC_SUBBANDS_4 | SBC_SUBBANDS_8;
-        capabilities.block_length = SBC_BLOCK_LENGTH_4 | SBC_BLOCK_LENGTH_8 | SBC_BLOCK_LENGTH_12 | SBC_BLOCK_LENGTH_16;
-        capabilities.min_bitpool = MIN_BITPOOL;
-        capabilities.max_bitpool = MAX_BITPOOL;
-
-        pa_dbus_append_basic_array_variant_dict_entry(&d, "Capabilities", DBUS_TYPE_BYTE, &capabilities, sizeof(capabilities));
+        void * capabilities;
+        size_t capabilities_size = a2dp_codec->get_capabilities(&capabilities);
+        pa_dbus_append_basic_array_variant_dict_entry(&d, "Capabilities", DBUS_TYPE_BYTE, capabilities,
+                                                      (unsigned int) capabilities_size);
+        a2dp_codec->free_capabilities(&capabilities);
     }
 
     dbus_message_iter_close_container(&i, &d);
@@ -927,6 +931,9 @@ static void parse_interfaces_and_properties(pa_bluetooth_discovery *y, DBusMessa
     const char *path;
     void *state;
     pa_bluetooth_device *d;
+    pa_a2dp_codec_index_t *index;
+    pa_hashmap *indices;
+    char *endpoint;
 
     pa_assert(dbus_message_iter_get_arg_type(dict_i) == DBUS_TYPE_OBJECT_PATH);
     dbus_message_iter_get_basic(dict_i, &path);
@@ -964,8 +971,13 @@ static void parse_interfaces_and_properties(pa_bluetooth_discovery *y, DBusMessa
             if (!a->valid)
                 return;
 
-            register_endpoint(y, path, A2DP_SOURCE_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SOURCE);
-            register_endpoint(y, path, A2DP_SINK_ENDPOINT, PA_BLUETOOTH_UUID_A2DP_SINK);
+            pa_a2dp_get_ordered_indices(&indices, &y->a2dp_config);
+            PA_HASHMAP_FOREACH(index, indices, state) {
+                pa_a2dp_codec_index_to_endpoint(*index, &endpoint);
+                register_endpoint(y, path, endpoint,
+                                  pa_a2dp_codec_index_is_sink(*index) ? PA_BLUETOOTH_UUID_A2DP_SINK
+                                                                      : PA_BLUETOOTH_UUID_A2DP_SOURCE);
+            }
 
         } else if (pa_streq(interface, BLUEZ_DEVICE_INTERFACE)) {
 
@@ -1257,47 +1269,6 @@ fail:
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-static uint8_t a2dp_default_bitpool(uint8_t freq, uint8_t mode) {
-    /* These bitpool values were chosen based on the A2DP spec recommendation */
-    switch (freq) {
-        case SBC_SAMPLING_FREQ_16000:
-        case SBC_SAMPLING_FREQ_32000:
-            return 53;
-
-        case SBC_SAMPLING_FREQ_44100:
-
-            switch (mode) {
-                case SBC_CHANNEL_MODE_MONO:
-                case SBC_CHANNEL_MODE_DUAL_CHANNEL:
-                    return 31;
-
-                case SBC_CHANNEL_MODE_STEREO:
-                case SBC_CHANNEL_MODE_JOINT_STEREO:
-                    return 53;
-            }
-
-            pa_log_warn("Invalid channel mode %u", mode);
-            return 53;
-
-        case SBC_SAMPLING_FREQ_48000:
-
-            switch (mode) {
-                case SBC_CHANNEL_MODE_MONO:
-                case SBC_CHANNEL_MODE_DUAL_CHANNEL:
-                    return 29;
-
-                case SBC_CHANNEL_MODE_STEREO:
-                case SBC_CHANNEL_MODE_JOINT_STEREO:
-                    return 51;
-            }
-
-            pa_log_warn("Invalid channel mode %u", mode);
-            return 51;
-    }
-
-    pa_log_warn("Invalid sampling freq %u", freq);
-    return 53;
-}
 
 const char *pa_bluetooth_profile_to_string(pa_bluetooth_profile_t profile) {
     switch(profile) {
@@ -1326,6 +1297,18 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
     pa_bluetooth_profile_t p = PA_BLUETOOTH_PROFILE_OFF;
     DBusMessageIter args, props;
     DBusMessage *r;
+    pa_a2dp_codec_index_t index;
+    const pa_a2dp_codec_t * a2dp_codec;
+    pa_a2dp_sink_t *a2dp_sink = NULL;
+    pa_a2dp_source_t *a2dp_source = NULL;
+
+    endpoint_path = dbus_message_get_path(m);
+
+    pa_a2dp_endpoint_to_codec_index(endpoint_path, &index);
+    pa_a2dp_codec_index_to_a2dp_codec(index, &a2dp_codec);
+
+    if(!a2dp_codec)
+        goto fail2;
 
     if (!dbus_message_iter_init(m, &args) || !pa_streq(dbus_message_get_signature(m), "oa{sv}")) {
         pa_log_error("Invalid signature for method SetConfiguration()");
@@ -1367,13 +1350,14 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
 
             dbus_message_iter_get_basic(&value, &uuid);
 
-            endpoint_path = dbus_message_get_path(m);
-            if (pa_streq(endpoint_path, A2DP_SOURCE_ENDPOINT)) {
+            if (pa_a2dp_codec_index_is_source(index)) {
                 if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SOURCE))
                     p = PA_BLUETOOTH_PROFILE_A2DP_SINK;
-            } else if (pa_streq(endpoint_path, A2DP_SINK_ENDPOINT)) {
+                a2dp_source = a2dp_codec->a2dp_source;
+            } else if (pa_a2dp_codec_index_is_sink(index)) {
                 if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SINK))
                     p = PA_BLUETOOTH_PROFILE_A2DP_SOURCE;
+                a2dp_sink = a2dp_codec->a2dp_sink;
             }
 
             if (p == PA_BLUETOOTH_PROFILE_OFF) {
@@ -1389,7 +1373,6 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
             dbus_message_iter_get_basic(&value, &dev_path);
         } else if (pa_streq(key, "Configuration")) {
             DBusMessageIter array;
-            a2dp_sbc_t *c;
 
             if (var != DBUS_TYPE_ARRAY) {
                 pa_log_error("Property %s of wrong type %c", key, (char)var);
@@ -1404,40 +1387,9 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
             }
 
             dbus_message_iter_get_fixed_array(&array, &config, &size);
-            if (size != sizeof(a2dp_sbc_t)) {
-                pa_log_error("Configuration array of invalid size");
-                goto fail;
-            }
 
-            c = (a2dp_sbc_t *) config;
-
-            if (c->frequency != SBC_SAMPLING_FREQ_16000 && c->frequency != SBC_SAMPLING_FREQ_32000 &&
-                c->frequency != SBC_SAMPLING_FREQ_44100 && c->frequency != SBC_SAMPLING_FREQ_48000) {
-                pa_log_error("Invalid sampling frequency in configuration");
+            if(!a2dp_codec->set_configuration(config, (const size_t) size))
                 goto fail;
-            }
-
-            if (c->channel_mode != SBC_CHANNEL_MODE_MONO && c->channel_mode != SBC_CHANNEL_MODE_DUAL_CHANNEL &&
-                c->channel_mode != SBC_CHANNEL_MODE_STEREO && c->channel_mode != SBC_CHANNEL_MODE_JOINT_STEREO) {
-                pa_log_error("Invalid channel mode in configuration");
-                goto fail;
-            }
-
-            if (c->allocation_method != SBC_ALLOCATION_SNR && c->allocation_method != SBC_ALLOCATION_LOUDNESS) {
-                pa_log_error("Invalid allocation method in configuration");
-                goto fail;
-            }
-
-            if (c->subbands != SBC_SUBBANDS_4 && c->subbands != SBC_SUBBANDS_8) {
-                pa_log_error("Invalid SBC subbands in configuration");
-                goto fail;
-            }
-
-            if (c->block_length != SBC_BLOCK_LENGTH_4 && c->block_length != SBC_BLOCK_LENGTH_8 &&
-                c->block_length != SBC_BLOCK_LENGTH_12 && c->block_length != SBC_BLOCK_LENGTH_16) {
-                pa_log_error("Invalid block length in configuration");
-                goto fail;
-            }
         }
 
         dbus_message_iter_next(&props);
@@ -1459,6 +1411,11 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
         goto fail2;
     }
 
+    if(!a2dp_sink && !a2dp_source){
+        pa_log_error("No a2dp_sink or a2dp_source available for endpoint %s", endpoint_path);
+        goto fail2;
+    }
+
     sender = dbus_message_get_sender(m);
 
     pa_assert_se(r = dbus_message_new_method_return(m));
@@ -1468,6 +1425,10 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
     t = pa_bluetooth_transport_new(d, sender, path, p, config, size);
     t->acquire = bluez5_transport_acquire_cb;
     t->release = bluez5_transport_release_cb;
+    t->codec = a2dp_codec->codec;
+    t->a2dp_codec = a2dp_codec;
+    t->a2dp_sink = a2dp_sink;
+    t->a2dp_source = a2dp_source;
     pa_bluetooth_transport_put(t);
 
     pa_log_debug("Transport %s available for profile %s", t->path, pa_bluetooth_profile_to_string(t->profile));
@@ -1484,22 +1445,15 @@ fail2:
 
 static DBusMessage *endpoint_select_configuration(DBusConnection *conn, DBusMessage *m, void *userdata) {
     pa_bluetooth_discovery *y = userdata;
-    a2dp_sbc_t *cap, config;
-    uint8_t *pconf = (uint8_t *) &config;
-    int i, size;
+    void *cap, *pconf;
+    int size,config_size;
     DBusMessage *r;
     DBusError err;
+    pa_a2dp_codec_index_t index;
+    const pa_a2dp_codec_t *a2dp_codec;
+    const char * endpoint = dbus_message_get_path(m);
 
-    static const struct {
-        uint32_t rate;
-        uint8_t cap;
-    } freq_table[] = {
-        { 16000U, SBC_SAMPLING_FREQ_16000 },
-        { 32000U, SBC_SAMPLING_FREQ_32000 },
-        { 44100U, SBC_SAMPLING_FREQ_44100 },
-        { 48000U, SBC_SAMPLING_FREQ_48000 }
-    };
-
+    pa_log_debug("selecing configuration");
     dbus_error_init(&err);
 
     if (!dbus_message_get_args(m, &err, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &cap, &size, DBUS_TYPE_INVALID)) {
@@ -1508,102 +1462,22 @@ static DBusMessage *endpoint_select_configuration(DBusConnection *conn, DBusMess
         goto fail;
     }
 
-    if (size != sizeof(config)) {
-        pa_log_error("Capabilities array has invalid size");
+    pa_a2dp_endpoint_to_codec_index(endpoint, &index);
+    pa_a2dp_codec_index_to_a2dp_codec(index, &a2dp_codec);
+
+    if(!a2dp_codec)
+        goto fail;
+
+    config_size = (int) a2dp_codec->select_configuration(y->core->default_sample_spec, cap, (const size_t) size, &pconf);
+    if (size != config_size) {
+        pa_log_error("Capabilities array has invalid size %d, %d",size, config_size);
         goto fail;
     }
-
-    pa_zero(config);
-
-    /* Find the lowest freq that is at least as high as the requested sampling rate */
-    for (i = 0; (unsigned) i < PA_ELEMENTSOF(freq_table); i++)
-        if (freq_table[i].rate >= y->core->default_sample_spec.rate && (cap->frequency & freq_table[i].cap)) {
-            config.frequency = freq_table[i].cap;
-            break;
-        }
-
-    if ((unsigned) i == PA_ELEMENTSOF(freq_table)) {
-        for (--i; i >= 0; i--) {
-            if (cap->frequency & freq_table[i].cap) {
-                config.frequency = freq_table[i].cap;
-                break;
-            }
-        }
-
-        if (i < 0) {
-            pa_log_error("Not suitable sample rate");
-            goto fail;
-        }
-    }
-
-    pa_assert((unsigned) i < PA_ELEMENTSOF(freq_table));
-
-    if (y->core->default_sample_spec.channels <= 1) {
-        if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)
-            config.channel_mode = SBC_CHANNEL_MODE_MONO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_JOINT_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_JOINT_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_DUAL_CHANNEL)
-            config.channel_mode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
-        else {
-            pa_log_error("No supported channel modes");
-            goto fail;
-        }
-    }
-
-    if (y->core->default_sample_spec.channels >= 2) {
-        if (cap->channel_mode & SBC_CHANNEL_MODE_JOINT_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_JOINT_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_STEREO)
-            config.channel_mode = SBC_CHANNEL_MODE_STEREO;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_DUAL_CHANNEL)
-            config.channel_mode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
-        else if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)
-            config.channel_mode = SBC_CHANNEL_MODE_MONO;
-        else {
-            pa_log_error("No supported channel modes");
-            goto fail;
-        }
-    }
-
-    if (cap->block_length & SBC_BLOCK_LENGTH_16)
-        config.block_length = SBC_BLOCK_LENGTH_16;
-    else if (cap->block_length & SBC_BLOCK_LENGTH_12)
-        config.block_length = SBC_BLOCK_LENGTH_12;
-    else if (cap->block_length & SBC_BLOCK_LENGTH_8)
-        config.block_length = SBC_BLOCK_LENGTH_8;
-    else if (cap->block_length & SBC_BLOCK_LENGTH_4)
-        config.block_length = SBC_BLOCK_LENGTH_4;
-    else {
-        pa_log_error("No supported block lengths");
-        goto fail;
-    }
-
-    if (cap->subbands & SBC_SUBBANDS_8)
-        config.subbands = SBC_SUBBANDS_8;
-    else if (cap->subbands & SBC_SUBBANDS_4)
-        config.subbands = SBC_SUBBANDS_4;
-    else {
-        pa_log_error("No supported subbands");
-        goto fail;
-    }
-
-    if (cap->allocation_method & SBC_ALLOCATION_LOUDNESS)
-        config.allocation_method = SBC_ALLOCATION_LOUDNESS;
-    else if (cap->allocation_method & SBC_ALLOCATION_SNR)
-        config.allocation_method = SBC_ALLOCATION_SNR;
-
-    config.min_bitpool = (uint8_t) PA_MAX(MIN_BITPOOL, cap->min_bitpool);
-    config.max_bitpool = (uint8_t) PA_MIN(a2dp_default_bitpool(config.frequency, config.channel_mode), cap->max_bitpool);
-
-    if (config.min_bitpool > config.max_bitpool)
-        goto fail;
 
     pa_assert_se(r = dbus_message_new_method_return(m));
     pa_assert_se(dbus_message_append_args(r, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &pconf, size, DBUS_TYPE_INVALID));
 
+    a2dp_codec->free_configuration(&pconf);
     return r;
 
 fail:
@@ -1668,6 +1542,7 @@ static DBusHandlerResult endpoint_handler(DBusConnection *c, DBusMessage *m, voi
     struct pa_bluetooth_discovery *y = userdata;
     DBusMessage *r = NULL;
     const char *path, *interface, *member;
+    pa_a2dp_codec_index_t index;
 
     pa_assert(y);
 
@@ -1677,7 +1552,8 @@ static DBusHandlerResult endpoint_handler(DBusConnection *c, DBusMessage *m, voi
 
     pa_log_debug("dbus: path=%s, interface=%s, member=%s", path, interface, member);
 
-    if (!pa_streq(path, A2DP_SOURCE_ENDPOINT) && !pa_streq(path, A2DP_SINK_ENDPOINT))
+    pa_a2dp_endpoint_to_codec_index(path, &index);
+    if (index == PA_A2DP_CODEC_INDEX_UNAVAILABLE)
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
     if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Introspectable", "Introspect")) {
@@ -1706,6 +1582,10 @@ static DBusHandlerResult endpoint_handler(DBusConnection *c, DBusMessage *m, voi
 }
 
 static void endpoint_init(pa_bluetooth_discovery *y, pa_bluetooth_profile_t profile) {
+    void *state;
+    pa_a2dp_codec_index_t *index;
+    pa_hashmap *indices;
+    char *endpoint;
     static const DBusObjectPathVTable vtable_endpoint = {
         .message_function = endpoint_handler,
     };
@@ -1714,32 +1594,48 @@ static void endpoint_init(pa_bluetooth_discovery *y, pa_bluetooth_profile_t prof
 
     switch(profile) {
         case PA_BLUETOOTH_PROFILE_A2DP_SINK:
-            pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SOURCE_ENDPOINT,
-                                                              &vtable_endpoint, y));
+            pa_a2dp_get_source_indices(&indices, &y->a2dp_config);
             break;
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
-            pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), A2DP_SINK_ENDPOINT,
-                                                              &vtable_endpoint, y));
+            pa_a2dp_get_sink_indices(&indices, &y->a2dp_config);
             break;
         default:
             pa_assert_not_reached();
             break;
     }
+
+    PA_HASHMAP_FOREACH(index, indices, state){
+        pa_a2dp_codec_index_to_endpoint(*index, &endpoint);
+        if(!endpoint)
+            continue;
+        pa_assert_se(dbus_connection_register_object_path(pa_dbus_connection_get(y->connection), endpoint,
+                                                          &vtable_endpoint, y));
+    }
 }
 
 static void endpoint_done(pa_bluetooth_discovery *y, pa_bluetooth_profile_t profile) {
+    void *state;
+    pa_a2dp_codec_index_t *index;
+    pa_hashmap *indices;
+    char *endpoint;
+
     pa_assert(y);
 
     switch(profile) {
         case PA_BLUETOOTH_PROFILE_A2DP_SINK:
-            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SOURCE_ENDPOINT);
+            pa_a2dp_get_source_indices(&indices, &y->a2dp_config);
             break;
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
-            dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), A2DP_SINK_ENDPOINT);
+            pa_a2dp_get_sink_indices(&indices, &y->a2dp_config);
             break;
         default:
             pa_assert_not_reached();
             break;
+    }
+
+    PA_HASHMAP_FOREACH(index,indices,state){
+        pa_a2dp_codec_index_to_endpoint(*index, &endpoint);
+        dbus_connection_unregister_object_path(pa_dbus_connection_get(y->connection), endpoint);
     }
 }
 
@@ -1759,6 +1655,8 @@ pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backe
                                      (pa_free_cb_t) device_free);
     y->transports = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
     PA_LLIST_HEAD_INIT(pa_dbus_pending, y->pending);
+
+    pa_a2dp_init(&y->a2dp_config);
 
     for (i = 0; i < PA_BLUETOOTH_HOOK_MAX; i++)
         pa_hook_init(&y->hooks[i], y);
@@ -1870,6 +1768,9 @@ void pa_bluetooth_discovery_unref(pa_bluetooth_discovery *y) {
 
         endpoint_done(y, PA_BLUETOOTH_PROFILE_A2DP_SINK);
         endpoint_done(y, PA_BLUETOOTH_PROFILE_A2DP_SOURCE);
+
+        if(y->a2dp_config)
+            pa_a2dp_free(&y->a2dp_config);
 
         pa_dbus_connection_unref(y->connection);
     }

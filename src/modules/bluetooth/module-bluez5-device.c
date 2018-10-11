@@ -45,9 +45,8 @@
 #include <pulsecore/thread-mq.h>
 #include <pulsecore/time-smoother.h>
 
-#include "a2dp-codecs.h"
+#include "a2dp-api.h"
 #include "bluez5-util.h"
-#include "rtp.h"
 
 PA_MODULE_AUTHOR("João Paulo Rechi Vita");
 PA_MODULE_DESCRIPTION("BlueZ 5 Bluetooth audio sink and source");
@@ -61,13 +60,12 @@ PA_MODULE_USAGE("path=<device object path>"
 #define FIXED_LATENCY_RECORD_A2DP   (25 * PA_USEC_PER_MSEC)
 #define FIXED_LATENCY_RECORD_SCO    (25 * PA_USEC_PER_MSEC)
 
-#define BITPOOL_DEC_LIMIT 32
-#define BITPOOL_DEC_STEP 5
 #define HSP_MAX_GAIN 15
 
 static const char* const valid_modargs[] = {
     "path",
     "autodetect_mtu",
+    "a2dp_config",
     NULL
 };
 
@@ -93,17 +91,13 @@ typedef struct bluetooth_msg {
 PA_DEFINE_PRIVATE_CLASS(bluetooth_msg, pa_msgobject);
 #define BLUETOOTH_MSG(o) (bluetooth_msg_cast(o))
 
-typedef struct sbc_info {
-    sbc_t sbc;                           /* Codec data */
-    bool sbc_initialized;                /* Keep track if the encoder is initialized */
-    size_t codesize, frame_length;       /* SBC Codesize, frame_length. We simply cache those values here */
-    uint16_t seq_num;                    /* Cumulative packet sequence */
-    uint8_t min_bitpool;
-    uint8_t max_bitpool;
-
-    void* buffer;                        /* Codec transfer buffer */
-    size_t buffer_size;                  /* Size of the buffer */
-} sbc_info_t;
+typedef struct pa_a2dp_info {
+    pa_proplist *a2dp_config;
+    void *a2dp_sink_data;
+    void *a2dp_source_data;
+    void *buffer;
+    size_t buffer_size;
+} pa_a2dp_info_t;
 
 struct userdata {
     pa_module *module;
@@ -145,7 +139,7 @@ struct userdata {
     pa_smoother *read_smoother;
     pa_memchunk write_memchunk;
     pa_sample_spec sample_spec;
-    struct sbc_info sbc_info;
+    pa_a2dp_info_t a2dp_info;
 };
 
 typedef enum pa_bluetooth_form_factor {
@@ -417,105 +411,55 @@ static void a2dp_prepare_buffer(struct userdata *u) {
 
     pa_assert(u);
 
-    if (u->sbc_info.buffer_size >= min_buffer_size)
+    if (u->a2dp_info.buffer_size >= min_buffer_size)
         return;
 
-    u->sbc_info.buffer_size = 2 * min_buffer_size;
-    pa_xfree(u->sbc_info.buffer);
-    u->sbc_info.buffer = pa_xmalloc(u->sbc_info.buffer_size);
+    u->a2dp_info.buffer_size = 2 * min_buffer_size;
+    pa_xfree(u->a2dp_info.buffer);
+    u->a2dp_info.buffer = pa_xmalloc(u->a2dp_info.buffer_size);
+}
+
+static void a2dp_encoder_buffer_read_cb(const void **read_buf, size_t read_buf_size, void *userdata) {
+    struct userdata *u = (struct userdata *) userdata;
+    if (!u->write_memchunk.memblock)
+        pa_sink_render_full(u->sink, read_buf_size, &u->write_memchunk);
+    pa_assert(u->write_memchunk.length == read_buf_size);
+    *read_buf = (const uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
+}
+
+static void a2dp_encoder_buffer_free_cb(const void **read_buf, void *userdata) {
+    struct userdata *u = (struct userdata *) userdata;
+    if (!read_buf)
+        return;;
+    pa_memblock_release(u->write_memchunk.memblock);
+    pa_memblock_unref(u->write_memchunk.memblock);
+    pa_memchunk_reset(&u->write_memchunk);
+    *read_buf = NULL;
 }
 
 /* Run from IO thread */
 static int a2dp_process_render(struct userdata *u) {
-    struct sbc_info *sbc_info;
-    struct rtp_header *header;
-    struct rtp_payload *payload;
-    size_t nbytes;
-    void *d;
-    const void *p;
-    size_t to_write, to_encode;
-    unsigned frame_count;
+    size_t nbytes, encoded;
     int ret = 0;
 
     pa_assert(u);
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK);
     pa_assert(u->sink);
-
-    /* First, render some data */
-    if (!u->write_memchunk.memblock)
-        pa_sink_render_full(u->sink, u->write_block_size, &u->write_memchunk);
-
-    pa_assert(u->write_memchunk.length == u->write_block_size);
+    pa_assert(u->transport);
+    pa_assert(u->transport->a2dp_source);
 
     a2dp_prepare_buffer(u);
 
-    sbc_info = &u->sbc_info;
-    header = sbc_info->buffer;
-    payload = (struct rtp_payload*) ((uint8_t*) sbc_info->buffer + sizeof(*header));
-
-    frame_count = 0;
-
-    /* Try to create a packet of the full MTU */
-
-    p = (const uint8_t *) pa_memblock_acquire_chunk(&u->write_memchunk);
-    to_encode = u->write_memchunk.length;
-
-    d = (uint8_t*) sbc_info->buffer + sizeof(*header) + sizeof(*payload);
-    to_write = sbc_info->buffer_size - sizeof(*header) - sizeof(*payload);
-
-    while (PA_LIKELY(to_encode > 0 && to_write > 0)) {
-        ssize_t written;
-        ssize_t encoded;
-
-        encoded = sbc_encode(&sbc_info->sbc,
-                             p, to_encode,
-                             d, to_write,
-                             &written);
-
-        if (PA_UNLIKELY(encoded <= 0)) {
-            pa_log_error("SBC encoding error (%li)", (long) encoded);
-            pa_memblock_release(u->write_memchunk.memblock);
-            return -1;
-        }
-
-        pa_assert_fp((size_t) encoded <= to_encode);
-        pa_assert_fp((size_t) encoded == sbc_info->codesize);
-
-        pa_assert_fp((size_t) written <= to_write);
-        pa_assert_fp((size_t) written == sbc_info->frame_length);
-
-        p = (const uint8_t*) p + encoded;
-        to_encode -= encoded;
-
-        d = (uint8_t*) d + written;
-        to_write -= written;
-
-        frame_count++;
-    }
-
-    pa_memblock_release(u->write_memchunk.memblock);
-
-    pa_assert(to_encode == 0);
-
-    PA_ONCE_BEGIN {
-        pa_log_debug("Using SBC encoder implementation: %s", pa_strnull(sbc_get_implementation_info(&sbc_info->sbc)));
-    } PA_ONCE_END;
-
-    /* write it to the fifo */
-    memset(sbc_info->buffer, 0, sizeof(*header) + sizeof(*payload));
-    header->v = 2;
-    header->pt = 1;
-    header->sequence_number = htons(sbc_info->seq_num++);
-    header->timestamp = htonl(u->write_index / pa_frame_size(&u->sample_spec));
-    header->ssrc = htonl(1);
-    payload->frame_count = frame_count;
-
-    nbytes = (uint8_t*) d - (uint8_t*) sbc_info->buffer;
+    nbytes = u->transport->a2dp_source->encode((uint32_t) (u->write_index / pa_frame_size(&u->sample_spec)),
+                                               u->a2dp_info.buffer, u->a2dp_info.buffer_size,
+                                               &encoded, u, &u->a2dp_info.a2dp_source_data);
+    if(nbytes == 0)
+        return -1;
 
     for (;;) {
         ssize_t l;
 
-        l = pa_write(u->stream_fd, sbc_info->buffer, nbytes, &u->stream_write_type);
+        l = pa_write(u->stream_fd, u->a2dp_info.buffer, nbytes, &u->stream_write_type);
 
         pa_assert(l != 0);
 
@@ -546,9 +490,7 @@ static int a2dp_process_render(struct userdata *u) {
             break;
         }
 
-        u->write_index += (uint64_t) u->write_memchunk.length;
-        pa_memblock_unref(u->write_memchunk.memblock);
-        pa_memchunk_reset(&u->write_memchunk);
+        u->write_index += encoded;
 
         ret = 1;
 
@@ -567,6 +509,8 @@ static int a2dp_process_push(struct userdata *u) {
     pa_assert(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SOURCE);
     pa_assert(u->source);
     pa_assert(u->read_smoother);
+    pa_assert(u->transport);
+    pa_assert(u->transport->a2dp_sink);
 
     memchunk.memblock = pa_memblock_new(u->core->mempool, u->read_block_size);
     memchunk.index = memchunk.length = 0;
@@ -574,22 +518,18 @@ static int a2dp_process_push(struct userdata *u) {
     for (;;) {
         bool found_tstamp = false;
         pa_usec_t tstamp;
-        struct sbc_info *sbc_info;
-        struct rtp_header *header;
-        struct rtp_payload *payload;
-        const void *p;
+        pa_a2dp_info_t *a2dp_info;
         void *d;
         ssize_t l;
-        size_t to_write, to_decode;
+        size_t decoded;
         size_t total_written = 0;
+        uint32_t timestamp;
 
         a2dp_prepare_buffer(u);
 
-        sbc_info = &u->sbc_info;
-        header = sbc_info->buffer;
-        payload = (struct rtp_payload*) ((uint8_t*) sbc_info->buffer + sizeof(*header));
+        a2dp_info = &u->a2dp_info;
 
-        l = pa_read(u->stream_fd, sbc_info->buffer, sbc_info->buffer_size, &u->stream_write_type);
+        l = pa_read(u->stream_fd, a2dp_info->buffer, a2dp_info->buffer_size, &u->stream_write_type);
 
         if (l <= 0) {
 
@@ -606,7 +546,7 @@ static int a2dp_process_push(struct userdata *u) {
             break;
         }
 
-        pa_assert((size_t) l <= sbc_info->buffer_size);
+        pa_assert((size_t) l <= a2dp_info->buffer_size);
 
         /* TODO: get timestamp from rtp */
         if (!found_tstamp) {
@@ -614,50 +554,22 @@ static int a2dp_process_push(struct userdata *u) {
             tstamp = pa_rtclock_now();
         }
 
-        p = (uint8_t*) sbc_info->buffer + sizeof(*header) + sizeof(*payload);
-        to_decode = l - sizeof(*header) - sizeof(*payload);
-
         d = pa_memblock_acquire(memchunk.memblock);
-        to_write = memchunk.length = pa_memblock_get_length(memchunk.memblock);
+        memchunk.length = pa_memblock_get_length(memchunk.memblock);
 
-        while (PA_LIKELY(to_decode > 0)) {
-            size_t written;
-            ssize_t decoded;
-
-            decoded = sbc_decode(&sbc_info->sbc,
-                                 p, to_decode,
-                                 d, to_write,
-                                 &written);
-
-            if (PA_UNLIKELY(decoded <= 0)) {
-                pa_log_error("SBC decoding error (%li)", (long) decoded);
-                pa_memblock_release(memchunk.memblock);
-                pa_memblock_unref(memchunk.memblock);
-                return 0;
-            }
-
-            total_written += written;
-
-            /* Reset frame length, it can be changed due to bitpool change */
-            sbc_info->frame_length = sbc_get_frame_length(&sbc_info->sbc);
-
-            pa_assert_fp((size_t) decoded <= to_decode);
-            pa_assert_fp((size_t) decoded == sbc_info->frame_length);
-
-            pa_assert_fp((size_t) written == sbc_info->codesize);
-
-            p = (const uint8_t*) p + decoded;
-            to_decode -= decoded;
-
-            d = (uint8_t*) d + written;
-            to_write -= written;
+        total_written = u->transport->a2dp_sink->decode(a2dp_info->buffer, (size_t) l, d, memchunk.length, &decoded,
+                                                        &timestamp, &a2dp_info->a2dp_sink_data);
+        if(total_written == 0){
+            pa_memblock_release(memchunk.memblock);
+            pa_memblock_unref(memchunk.memblock);
+            return 0;
         }
 
         u->read_index += (uint64_t) total_written;
         pa_smoother_put(u->read_smoother, tstamp, pa_bytes_to_usec(u->read_index, &u->sample_spec));
         pa_smoother_resume(u->read_smoother, tstamp, true);
 
-        memchunk.length -= to_write;
+        memchunk.length = total_written;
 
         pa_memblock_release(memchunk.memblock);
 
@@ -704,40 +616,10 @@ static void update_buffer_size(struct userdata *u) {
     }
 }
 
-/* Run from I/O thread */
-static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
-    struct sbc_info *sbc_info;
-
-    pa_assert(u);
-
-    sbc_info = &u->sbc_info;
-
-    if (sbc_info->sbc.bitpool == bitpool)
-        return;
-
-    if (bitpool > sbc_info->max_bitpool)
-        bitpool = sbc_info->max_bitpool;
-    else if (bitpool < sbc_info->min_bitpool)
-        bitpool = sbc_info->min_bitpool;
-
-    sbc_info->sbc.bitpool = bitpool;
-
-    sbc_info->codesize = sbc_get_codesize(&sbc_info->sbc);
-    sbc_info->frame_length = sbc_get_frame_length(&sbc_info->sbc);
-
-    pa_log_debug("Bitpool has changed to %u", sbc_info->sbc.bitpool);
-
-    u->read_block_size =
-        (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-        / sbc_info->frame_length * sbc_info->codesize;
-
-    u->write_block_size =
-        (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-        / sbc_info->frame_length * sbc_info->codesize;
-
+static void a2dp_set_sink(struct userdata *u){
     pa_sink_set_max_request_within_thread(u->sink, u->write_block_size);
     pa_sink_set_fixed_latency_within_thread(u->sink,
-            FIXED_LATENCY_PLAYBACK_A2DP + pa_bytes_to_usec(u->write_block_size, &u->sample_spec));
+                                            FIXED_LATENCY_PLAYBACK_A2DP + pa_bytes_to_usec(u->write_block_size, &u->sample_spec));
 
     /* If there is still data in the memchunk, we have to discard it
      * because the write_block_size may have changed. */
@@ -747,27 +629,6 @@ static void a2dp_set_bitpool(struct userdata *u, uint8_t bitpool) {
     }
 
     update_buffer_size(u);
-}
-
-/* Run from I/O thread */
-static void a2dp_reduce_bitpool(struct userdata *u) {
-    struct sbc_info *sbc_info;
-    uint8_t bitpool;
-
-    pa_assert(u);
-
-    sbc_info = &u->sbc_info;
-
-    /* Check if bitpool is already at its limit */
-    if (sbc_info->sbc.bitpool <= BITPOOL_DEC_LIMIT)
-        return;
-
-    bitpool = sbc_info->sbc.bitpool - BITPOOL_DEC_STEP;
-
-    if (bitpool < BITPOOL_DEC_LIMIT)
-        bitpool = BITPOOL_DEC_LIMIT;
-
-    a2dp_set_bitpool(u, bitpool);
 }
 
 static void teardown_stream(struct userdata *u) {
@@ -859,13 +720,15 @@ static void transport_config_mtu(struct userdata *u) {
             u->write_block_size = pa_frame_align(u->write_block_size, &u->sink->sample_spec);
         }
     } else {
-        u->read_block_size =
-            (u->read_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-            / u->sbc_info.frame_length * u->sbc_info.codesize;
-
-        u->write_block_size =
-            (u->write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-            / u->sbc_info.frame_length * u->sbc_info.codesize;
+        u->read_block_size = u->read_link_mtu;
+        u->write_block_size = u->write_link_mtu;
+        if (u->transport->a2dp_sink)
+            u->transport->a2dp_sink->get_block_size(u->read_link_mtu, &u->read_block_size, &u->a2dp_info.a2dp_sink_data);
+        else if (u->transport->a2dp_source)
+            u->transport->a2dp_source->get_block_size(u->write_link_mtu, &u->write_block_size,
+                                                      &u->a2dp_info.a2dp_source_data);
+        else
+            pa_assert_not_reached();
     }
 
     if (u->sink) {
@@ -905,9 +768,16 @@ static void setup_stream(struct userdata *u) {
 
     pa_log_debug("Stream properly set up, we're ready to roll!");
 
-    if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
-        a2dp_set_bitpool(u, u->sbc_info.max_bitpool);
-        update_buffer_size(u);
+    if (u->transport->a2dp_sink) {
+        u->transport->a2dp_sink->setup_stream(&u->a2dp_info.a2dp_sink_data);
+        u->transport->a2dp_sink->get_block_size(u->read_link_mtu, &u->read_block_size,
+                                                &u->a2dp_info.a2dp_sink_data);
+
+    } else if (u->transport->a2dp_source) {
+        u->transport->a2dp_source->setup_stream(&u->a2dp_info.a2dp_source_data);
+        u->transport->a2dp_source->get_block_size(u->write_link_mtu, &u->write_block_size,
+                                                  &u->a2dp_info.a2dp_source_data);
+        a2dp_set_sink(u);
     }
 
     u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
@@ -1295,111 +1165,39 @@ static void transport_config(struct userdata *u) {
         u->sample_spec.channels = 1;
         u->sample_spec.rate = 8000;
     } else {
-        sbc_info_t *sbc_info = &u->sbc_info;
-        a2dp_sbc_t *config;
-
+        pa_proplist *user_config = NULL;
         pa_assert(u->transport);
 
-        u->sample_spec.format = PA_SAMPLE_S16LE;
-        config = (a2dp_sbc_t *) u->transport->config;
+        if (u->a2dp_info.a2dp_config)
+            user_config = pa_proplist_copy(u->a2dp_info.a2dp_config);
 
-        if (sbc_info->sbc_initialized)
-            sbc_reinit(&sbc_info->sbc, 0);
-        else
-            sbc_init(&sbc_info->sbc, 0);
-        sbc_info->sbc_initialized = true;
+        if (u->transport->a2dp_sink) {
+            pa_assert_se(u->transport->a2dp_sink->init(&u->a2dp_info.a2dp_sink_data));
 
-        switch (config->frequency) {
-            case SBC_SAMPLING_FREQ_16000:
-                sbc_info->sbc.frequency = SBC_FREQ_16000;
-                u->sample_spec.rate = 16000U;
-                break;
-            case SBC_SAMPLING_FREQ_32000:
-                sbc_info->sbc.frequency = SBC_FREQ_32000;
-                u->sample_spec.rate = 32000U;
-                break;
-            case SBC_SAMPLING_FREQ_44100:
-                sbc_info->sbc.frequency = SBC_FREQ_44100;
-                u->sample_spec.rate = 44100U;
-                break;
-            case SBC_SAMPLING_FREQ_48000:
-                sbc_info->sbc.frequency = SBC_FREQ_48000;
-                u->sample_spec.rate = 48000U;
-                break;
-            default:
-                pa_assert_not_reached();
-        }
+            if (u->transport->a2dp_sink->update_user_config && user_config)
+                u->transport->a2dp_sink->update_user_config(user_config,
+                                                            &u->a2dp_info.a2dp_sink_data);
 
-        switch (config->channel_mode) {
-            case SBC_CHANNEL_MODE_MONO:
-                sbc_info->sbc.mode = SBC_MODE_MONO;
-                u->sample_spec.channels = 1;
-                break;
-            case SBC_CHANNEL_MODE_DUAL_CHANNEL:
-                sbc_info->sbc.mode = SBC_MODE_DUAL_CHANNEL;
-                u->sample_spec.channels = 2;
-                break;
-            case SBC_CHANNEL_MODE_STEREO:
-                sbc_info->sbc.mode = SBC_MODE_STEREO;
-                u->sample_spec.channels = 2;
-                break;
-            case SBC_CHANNEL_MODE_JOINT_STEREO:
-                sbc_info->sbc.mode = SBC_MODE_JOINT_STEREO;
-                u->sample_spec.channels = 2;
-                break;
-            default:
-                pa_assert_not_reached();
-        }
+            u->transport->a2dp_sink->config_transport(u->core->default_sample_spec, u->transport->config,
+                                                      u->transport->config_size,
+                                                      &u->sample_spec, &u->a2dp_info.a2dp_sink_data);
+        } else if (u->transport->a2dp_source) {
+            pa_assert_se(
+                    u->transport->a2dp_source->init(a2dp_encoder_buffer_read_cb, a2dp_encoder_buffer_free_cb,
+                                                    &u->a2dp_info.a2dp_source_data));
 
-        switch (config->allocation_method) {
-            case SBC_ALLOCATION_SNR:
-                sbc_info->sbc.allocation = SBC_AM_SNR;
-                break;
-            case SBC_ALLOCATION_LOUDNESS:
-                sbc_info->sbc.allocation = SBC_AM_LOUDNESS;
-                break;
-            default:
-                pa_assert_not_reached();
-        }
+            if (u->transport->a2dp_source->update_user_config && user_config)
+                u->transport->a2dp_source->update_user_config(user_config,
+                                                              &u->a2dp_info.a2dp_source_data);
 
-        switch (config->subbands) {
-            case SBC_SUBBANDS_4:
-                sbc_info->sbc.subbands = SBC_SB_4;
-                break;
-            case SBC_SUBBANDS_8:
-                sbc_info->sbc.subbands = SBC_SB_8;
-                break;
-            default:
-                pa_assert_not_reached();
-        }
+            u->transport->a2dp_source->config_transport(u->core->default_sample_spec, u->transport->config,
+                                                        u->transport->config_size,
+                                                        &u->sample_spec, &u->a2dp_info.a2dp_source_data);
+        } else
+            pa_assert_not_reached();
 
-        switch (config->block_length) {
-            case SBC_BLOCK_LENGTH_4:
-                sbc_info->sbc.blocks = SBC_BLK_4;
-                break;
-            case SBC_BLOCK_LENGTH_8:
-                sbc_info->sbc.blocks = SBC_BLK_8;
-                break;
-            case SBC_BLOCK_LENGTH_12:
-                sbc_info->sbc.blocks = SBC_BLK_12;
-                break;
-            case SBC_BLOCK_LENGTH_16:
-                sbc_info->sbc.blocks = SBC_BLK_16;
-                break;
-            default:
-                pa_assert_not_reached();
-        }
-
-        sbc_info->min_bitpool = config->min_bitpool;
-        sbc_info->max_bitpool = config->max_bitpool;
-
-        /* Set minimum bitpool for source to get the maximum possible block_size */
-        sbc_info->sbc.bitpool = u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK ? sbc_info->max_bitpool : sbc_info->min_bitpool;
-        sbc_info->codesize = sbc_get_codesize(&sbc_info->sbc);
-        sbc_info->frame_length = sbc_get_frame_length(&sbc_info->sbc);
-
-        pa_log_info("SBC parameters: allocation=%u, subbands=%u, blocks=%u, bitpool=%u",
-                    sbc_info->sbc.allocation, sbc_info->sbc.subbands ? 8 : 4, sbc_info->sbc.blocks, sbc_info->sbc.bitpool);
+        if(user_config)
+            pa_proplist_free(user_config);
     }
 }
 
@@ -1619,6 +1417,11 @@ static void thread_func(void *userdata) {
                     if (audio_sent <= time_passed) {
                         size_t bytes_to_send = pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec);
 
+                        if (u->transport->a2dp_source && u->transport->a2dp_source->set_tx_length){
+                            u->transport->a2dp_source->set_tx_length(bytes_to_send, &u->a2dp_info.a2dp_source_data);
+                            u->transport->a2dp_source->get_block_size(u->write_link_mtu, &u->write_block_size, &u->a2dp_info.a2dp_source_data);
+                        }
+
                         /* There are more than two blocks that need to be written. It seems that
                          * the socket has not been accepting data fast enough (could be due to
                          * hiccups in the wireless transmission). We need to discard everything
@@ -1650,8 +1453,13 @@ static void thread_func(void *userdata) {
                                 skip_bytes -= bytes_to_render;
                             }
 
-                            if (u->write_index > 0 && u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK)
-                                a2dp_reduce_bitpool(u);
+                            if (u->write_index > 0 && u->transport->a2dp_source &&
+                                u->transport->a2dp_source->decrease_quality) {
+
+                                u->transport->a2dp_source->decrease_quality(&u->a2dp_info.a2dp_source_data);
+                                u->transport->a2dp_source->get_block_size(u->write_link_mtu, &u->write_block_size, &u->a2dp_info.a2dp_source_data);
+                            }
+
                         }
 
                         blocks_to_write = 1;
@@ -1806,6 +1614,14 @@ static void stop_thread(struct userdata *u) {
     }
 
     if (u->transport) {
+        if(u->transport->a2dp_sink && u->a2dp_info.a2dp_sink_data){
+            u->transport->a2dp_sink->free(&u->a2dp_info.a2dp_sink_data);
+            u->a2dp_info.a2dp_sink_data = NULL;
+        }
+        if(u->transport->a2dp_source && u->a2dp_info.a2dp_sink_data){
+            u->transport->a2dp_source->free(&u->a2dp_info.a2dp_source_data);
+            u->a2dp_info.a2dp_source_data = NULL;
+        }
         transport_release(u);
         u->transport = NULL;
     }
@@ -2414,6 +2230,12 @@ int pa__init(pa_module* m) {
 
     u->device->autodetect_mtu = autodetect_mtu;
 
+    u->a2dp_info.a2dp_config = pa_proplist_new();
+    if (pa_modargs_get_proplist(ma, "a2dp_config", u->a2dp_info.a2dp_config, PA_UPDATE_REPLACE) < 0) {
+        pa_log("Invalid proplist key=value pairs for a2dp_config parameter");
+        goto fail_free_modargs;
+    }
+
     pa_modargs_free(ma);
 
     u->device_connection_changed_slot =
@@ -2491,11 +2313,17 @@ void pa__done(pa_module *m) {
     if (u->transport_microphone_gain_changed_slot)
         pa_hook_slot_free(u->transport_microphone_gain_changed_slot);
 
-    if (u->sbc_info.buffer)
-        pa_xfree(u->sbc_info.buffer);
+    if (u->a2dp_info.buffer)
+        pa_xfree(u->a2dp_info.buffer);
 
-    if (u->sbc_info.sbc_initialized)
-        sbc_finish(&u->sbc_info.sbc);
+    if (u->a2dp_info.a2dp_sink_data)
+        pa_xfree(u->a2dp_info.a2dp_sink_data);
+
+    if (u->a2dp_info.a2dp_source_data)
+        pa_xfree(u->a2dp_info.a2dp_source_data);
+
+    if (u->a2dp_info.a2dp_config)
+        pa_proplist_free(u->a2dp_info.a2dp_config);
 
     if (u->msg)
         pa_xfree(u->msg);

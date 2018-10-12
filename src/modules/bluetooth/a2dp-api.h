@@ -74,7 +74,7 @@ typedef struct pa_a2dp_sink {
 typedef struct pa_a2dp_source {
     int priority;
 
-    /* Load decoder syms if it's not loaded; Return true if it's loaded */
+    /* Load encoder syms if it's not loaded; Return true if it's loaded */
     bool (*encoder_load)();
 
     /* Memory management is pa_a2dp_source's work */

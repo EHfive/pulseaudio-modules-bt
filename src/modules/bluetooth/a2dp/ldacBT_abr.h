@@ -82,7 +82,7 @@ extern "C" {
 #define LDAC_ABR_API
 #endif /* LDAC_ABR_API */
 
-#include <ldacBT.h> /* HANDLE_LDAC_BT */
+#include "ldacBT.h" /* HANDLE_LDAC_BT */
 
 /* LDAC ABR handle type*/
 typedef struct _ldacbt_abr_param * HANDLE_LDAC_ABR;

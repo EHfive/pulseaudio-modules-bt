@@ -2119,8 +2119,9 @@ libbluez5_util_la_SOURCES = \
 		modules/bluetooth/a2dp/a2dp_util.c \
 		modules/bluetooth/a2dp/a2dp_sbc.c \
 		modules/bluetooth/a2dp/a2dp_ldac.c \
+		modules/bluetooth/a2dp/ldacBT.h \
+		modules/bluetooth/a2dp/ldacBT_abr.h \
 		modules/bluetooth/bluez5-util.h \
-		modules/bluetooth/a2dp-codecs.h
 		modules/bluetooth/a2dp-codecs.h \
 		modules/bluetooth/a2dp-api.h
 if HAVE_BLUEZ_5_OFONO_HEADSET

@@ -34,7 +34,6 @@
 #include <pulsecore/shared.h>
 
 #include "a2dp-api.h"
-#include "ldacBT.h"
 
 #include "bluez5-util.h"
 

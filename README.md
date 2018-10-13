@@ -1,30 +1,48 @@
 # pulseaudio-modules-bt
 
-this module is a fork of pulseaudio bluetooth modules
+this repo is a fork of pulseaudio bluetooth modules
 
-and add ldac encoding support
+and add LDAC, APTX, APTX-HD support
 
-so you can playing audio with ldac codec
+#### Added Codecs
+|Codec|Encoding(source role)|Decoding(sink role)|Sample format|Sample frequnecy|
+|:---:|:---:|:---:|:---:|:---:|
+|APTX | ✔| ✔ |s16|16-48 khz|
+|APTX HD| ✔| ✔ |s24|16-48 khz|
+|LDAC |✔ |✘|s16,s24,s32,f32|44.1-192.0 khz|
 
-use bluetooth A2DP device (support ldac decoding)
+APTX/APTX_HD sample format fixed to s32 in PA.
+
+Most LDAC devices do not support 176.4 khz, 192.0 khz. (Or all)
 
 ## Usage
-#### Arch Linux
+### Arch Linux
 
 install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packages/pulseaudio-modules-bt-git/)<sup>AUR</sup>
 
-#### General Installation
+### General Installation
 
 (I also create patch files, you can find them in releases)
 
-**requirements**
+**Make Dependencies**
 
 * pulseaudio,libpulse~=12.0
-* bluez,bluez-libs/libbluetooth~=5.0
+* bluez-libs/libbluetooth~=5.0
 * libdbus
+* ffmpeg(libavcodec, libavutil) >= 4.0
 * sbc
 * cmake
 * pkg-config
+
+**Runtime Dependencies**
+
+* pulseaudio
+* bluez
+* dbus
+* [Optional] ffmpeg(libavcodec, libavutil) --- APTX, APTX-HD support
+* [Optional] ldacBT_enc.so ldacBT_abr.so   --- LDAC encoding support, LDAC ABR support
+
+Note: ldacBT_enc.so ldacBT_abr.so building statements already included in CMakeLists.txt, you don't need to compile them by yourself (Of course, you could).
 
 **backup original pulseaudio bt modules**
 
@@ -111,5 +129,7 @@ see [Wiki](https://github.com/EHfive/pulseaudio-modules-bt/wiki)
 
 ~~add ldac abr (Adaptive Bit Rate) supprot~~
 
-add AAC, APTX , APTX HD Codec support using ffmpeg
+~~add APTX , APTX HD Codec support using ffmpeg~~
+
+add AAC support using Fraunhofer FDK AAC codec library or FFmpeg
 

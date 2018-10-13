@@ -7,6 +7,7 @@
 
 #include "../a2dp-api.h"
 
+#include "aptx_libs.c"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
@@ -41,9 +42,11 @@ static const AVCodec *av_codec_aptx_hd_encoder = NULL;
 
 
 static bool pa_aptx_decoder_load() {
+    if(!aptx_libs_load())
+        return false;
     if (av_codec_aptx_decoder)
         return true;
-    av_codec_aptx_decoder = avcodec_find_decoder(AV_CODEC_ID_APTX);
+    av_codec_aptx_decoder = avcodec_find_decoder_func(AV_CODEC_ID_APTX);
     if (!av_codec_aptx_decoder) {
         pa_log_debug("Cannot find APTX decoder in FFmpeg avcodec library");
         return false;
@@ -53,9 +56,11 @@ static bool pa_aptx_decoder_load() {
 }
 
 static bool pa_aptx_encoder_load() {
+    if(!aptx_libs_load())
+        return false;
     if (av_codec_aptx_encoder)
         return true;
-    av_codec_aptx_encoder = avcodec_find_encoder(AV_CODEC_ID_APTX);
+    av_codec_aptx_encoder = avcodec_find_encoder_func(AV_CODEC_ID_APTX);
     if (!av_codec_aptx_encoder) {
         pa_log_debug("Cannot find APTX encoder in FFmpeg avcodec library");
         return false;
@@ -65,9 +70,11 @@ static bool pa_aptx_encoder_load() {
 }
 
 static bool pa_aptx_hd_decoder_load() {
+    if(!aptx_libs_load())
+        return false;
     if (av_codec_aptx_hd_decoder)
         return true;
-    av_codec_aptx_hd_decoder = avcodec_find_decoder(AV_CODEC_ID_APTX_HD);
+    av_codec_aptx_hd_decoder = avcodec_find_decoder_func(AV_CODEC_ID_APTX_HD);
     if (!av_codec_aptx_hd_decoder) {
         pa_log_debug("Cannot find APTX HD decoder in FFmpeg avcodec library");
         return false;
@@ -77,9 +84,11 @@ static bool pa_aptx_hd_decoder_load() {
 }
 
 static bool pa_aptx_hd_encoder_load() {
+    if(!aptx_libs_load())
+        return false;
     if (av_codec_aptx_hd_encoder)
         return true;
-    av_codec_aptx_hd_encoder = avcodec_find_encoder(AV_CODEC_ID_APTX_HD);
+    av_codec_aptx_hd_encoder = avcodec_find_encoder_func(AV_CODEC_ID_APTX_HD);
     if (!av_codec_aptx_hd_encoder) {
         pa_log_debug("Cannot find APTX HD encoder in FFmpeg avcodec library");
         return false;
@@ -147,21 +156,21 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
         to_decode = read_buf_size;
     }
 
-    av_frame = av_frame_alloc();
-    pkt = av_packet_alloc();
+    av_frame = av_frame_alloc_func();
+    pkt = av_packet_alloc_func();
     pkt->data = p;
     pkt->size = (int) to_decode;
 
 
     *_decoded = 0;
 
-    ret = avcodec_send_packet(aptx_info->av_codec_ctx, pkt);
+    ret = avcodec_send_packet_func(aptx_info->av_codec_ctx, pkt);
     if (PA_UNLIKELY(ret < 0)) {
         pa_log_debug("Error submitting the packet to the decoder");
         total_written = 0;
         goto done;
     }
-    ret = avcodec_receive_frame(aptx_info->av_codec_ctx, av_frame);
+    ret = avcodec_receive_frame_func(aptx_info->av_codec_ctx, av_frame);
     if (PA_UNLIKELY(ret < 0)) {
         pa_log_debug("Error during decoding");
         goto done;
@@ -175,8 +184,8 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
     }
 
 done:
-    av_frame_free(&av_frame);
-    av_packet_free(&pkt);
+    av_frame_free_func(&av_frame);
+    av_packet_free_func(&pkt);
     return total_written;
 }
 
@@ -213,15 +222,15 @@ pa_dual_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         d = (uint8_t *) write_buf;
     }
 
-    av_frame = av_frame_alloc();
+    av_frame = av_frame_alloc_func();
     av_frame->nb_samples = aptx_info->nb_samples;
     av_frame->format = aptx_info->av_codec_ctx->sample_fmt;
     av_frame->channel_layout = aptx_info->av_codec_ctx->channel_layout;
 
-    pkt = av_packet_alloc();
+    pkt = av_packet_alloc_func();
 
-    pa_assert(av_frame_get_buffer(av_frame, 0) >= 0);
-    pa_assert(av_frame_make_writable(av_frame) >= 0);
+    pa_assert(av_frame_get_buffer_func(av_frame, 0) >= 0);
+    pa_assert(av_frame_make_writable_func(av_frame) >= 0);
 
 
     for (i = 0; i < av_frame->nb_samples * sizeof(uint32_t); i += sizeof(uint32_t)) {
@@ -230,7 +239,7 @@ pa_dual_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
     }
     *_encoded = 0;
 
-    ret = avcodec_send_frame(aptx_info->av_codec_ctx, av_frame);
+    ret = avcodec_send_frame_func(aptx_info->av_codec_ctx, av_frame);
 
     if (PA_UNLIKELY(ret < 0)) {
         fprintf(stderr, "Error sending the frame to the encoder\n");
@@ -238,7 +247,7 @@ pa_dual_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         goto done;
     }
 
-    ret = avcodec_receive_packet(aptx_info->av_codec_ctx, pkt);
+    ret = avcodec_receive_packet_func(aptx_info->av_codec_ctx, pkt);
 
     if (PA_UNLIKELY(ret != 0)) {
         fprintf(stderr, "Error receiving the packet from the encoder\n");
@@ -253,8 +262,8 @@ pa_dual_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
     *_encoded += aptx_info->block_size;
 
 done:
-    av_frame_free(&av_frame);
-    av_packet_free(&pkt);
+    av_frame_free_func(&av_frame);
+    av_packet_free_func(&pkt);
     aptx_info->read_buf_free(&p, read_cb_data);
     return nbytes;
 }
@@ -270,9 +279,9 @@ pa_dual_config_transport(pa_sample_spec default_sample_spec, const void *configu
     pa_assert_se(configuration_size == (aptx_info->is_hd ? sizeof(a2dp_aptxhd_t) : sizeof(a2dp_aptx_t)));
 
     if (aptx_info->av_codec_ctx)
-        avcodec_free_context(&aptx_info->av_codec_ctx);
+        avcodec_free_context_func(&aptx_info->av_codec_ctx);
 
-    aptx_info->av_codec_ctx = avcodec_alloc_context3(aptx_info->av_codec);
+    aptx_info->av_codec_ctx = avcodec_alloc_context3_func(aptx_info->av_codec);
     aptx_ctx = aptx_info->av_codec_ctx;
 
     aptx_ctx->sample_fmt = AV_SAMPLE_FMT_S32P;
@@ -313,7 +322,7 @@ pa_dual_config_transport(pa_sample_spec default_sample_spec, const void *configu
             pa_assert_not_reached();
     }
 
-    pa_assert_se(avcodec_open2(aptx_info->av_codec_ctx, aptx_info->av_codec, NULL) == 0);
+    pa_assert_se(avcodec_open2_func(aptx_info->av_codec_ctx, aptx_info->av_codec, NULL) == 0);
 
 };
 
@@ -359,7 +368,7 @@ static void pa_dual_free(void **codec_data) {
     if (!aptx_info)
         return;
     if (aptx_info->av_codec_ctx)
-        avcodec_free_context(&aptx_info->av_codec_ctx);
+        avcodec_free_context_func(&aptx_info->av_codec_ctx);
     pa_xfree(aptx_info);
     *codec_data = NULL;
 

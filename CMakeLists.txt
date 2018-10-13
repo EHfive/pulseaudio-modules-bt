@@ -17,6 +17,8 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(PulseAudio REQUIRED "libpulse")
 pkg_check_modules(DBUS REQUIRED "dbus-1")
 pkg_check_modules(SBC REQUIRED "sbc")
+pkg_check_modules(AVCODEC REQUIRED libavcodec>=58.18.100)
+pkg_check_modules(AVUTIL REQUIRED libavutil>=56.14.100)
 
 set(PulseAudio_CORE_LIBDIR ${PulseAudio_LIBDIR}/pulseaudio)
 set(MOD_BT_DIR ${PROJECT_SOURCE_DIR}/src/modules/bluetooth)
@@ -28,6 +30,8 @@ include_directories(${MOD_BT_DIR})
 include_directories(${DBUS_INCLUDE_DIRS})
 include_directories(${SBC_INCLUDE_DIRS})
 include_directories(${LDAC_INCLUDE_DIRS})
+include_directories(${AVCODEC_INCLUDE_DIRS} ${AVUTIL_INCLUDE_DIRS})
+
 link_directories(${PulseAudio_CORE_LIBDIR})
 
 execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=modlibexecdir libpulse
@@ -42,7 +46,6 @@ endif()
 
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
 
-set(MOD_LIBS ${PulseAudio_LIBRARYS} pthread pulsecore-${PulseAudio_VERSION})
 set(MOD_LIBS ${PulseAudio_LIBRARIES} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
 set(CMAKE_INSTALL_RPATH ${PulseAudio_CORE_LIBDIR}:${PulseAudio_modlibexecdir})
 
@@ -66,11 +69,11 @@ add_library(bluez5-util SHARED
         ${MOD_BT_DIR}/backend-ofono.c
         ${MOD_BT_DIR}/bluez5-util.c
         ${MOD_BT_DIR}/a2dp/a2dp_sbc.c
+        ${MOD_BT_DIR}/a2dp/a2dp_aptx.c
         ${MOD_BT_DIR}/a2dp/a2dp_ldac.c
         ${MOD_BT_DIR}/a2dp/a2dp_util.c
         )
-target_link_libraries(bluez5-util ${DBUS_LIBRARIES} ${MOD_LIBS})
-target_link_libraries(bluez5-util ${SBC_LIBRARIES}  ${DBUS_LIBRARIES} ${MOD_LIBS})
+target_link_libraries(bluez5-util dl ${SBC_LIBRARIES} ${DBUS_LIBRARIES} ${MOD_LIBS})
 
 # module-bluez5-discover
 add_library(module-bluez5-discover MODULE
@@ -88,7 +91,6 @@ add_library(module-bluez5-device MODULE
         )
 
 target_compile_definitions(module-bluez5-device PUBLIC PA_MODULE_NAME=module_bluez5_device)
-target_link_libraries(module-bluez5-device bluez5-util ${SBC_LIBRARIES} ${MOD_LIBS})
 target_link_libraries(module-bluez5-device bluez5-util ${MOD_LIBS})
 SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 

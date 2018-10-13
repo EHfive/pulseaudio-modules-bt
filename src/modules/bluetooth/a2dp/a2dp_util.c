@@ -14,6 +14,12 @@
 #define A2DP_VENDOR_SRC_ENDPOINT A2DP_SOURCE_ENDPOINT "/VENDOR"
 #define A2DP_VENDOR_SNK_ENDPOINT A2DP_SINK_ENDPOINT "/VENDOR"
 
+#define A2DP_APTX_SRC_ENDPOINT A2DP_VENDOR_SRC_ENDPOINT "/APTX"
+#define A2DP_APTX_SNK_ENDPOINT A2DP_VENDOR_SNK_ENDPOINT "/APTX"
+
+#define A2DP_APTX_HD_SRC_ENDPOINT A2DP_VENDOR_SRC_ENDPOINT "/APTXHD"
+#define A2DP_APTX_HD_SNK_ENDPOINT A2DP_VENDOR_SNK_ENDPOINT "/APTXHD"
+
 #define A2DP_LDAC_SRC_ENDPOINT A2DP_VENDOR_SRC_ENDPOINT "/LDAC"
 
 #define PA_A2DP_PRIORITY_DISABLE 0
@@ -189,6 +195,18 @@ void pa_a2dp_codec_index_to_endpoint(pa_a2dp_codec_index_t codec_index, const ch
         case PA_A2DP_SOURCE_SBC:
             *endpoint = A2DP_SBC_SRC_ENDPOINT;
             break;
+        case PA_A2DP_SINK_APTX:
+            *endpoint = A2DP_APTX_SNK_ENDPOINT;
+            break;
+        case PA_A2DP_SOURCE_APTX:
+            *endpoint = A2DP_APTX_SRC_ENDPOINT;
+            break;
+        case PA_A2DP_SINK_APTX_HD:
+            *endpoint = A2DP_APTX_HD_SNK_ENDPOINT;
+            break;
+        case PA_A2DP_SOURCE_APTX_HD:
+            *endpoint = A2DP_APTX_HD_SRC_ENDPOINT;
+            break;
         case PA_A2DP_SOURCE_LDAC:
             *endpoint = A2DP_LDAC_SRC_ENDPOINT;
             break;
@@ -202,6 +220,14 @@ void pa_a2dp_endpoint_to_codec_index(const char *endpoint, pa_a2dp_codec_index_t
         *codec_index = PA_A2DP_SINK_SBC;
     else if (streq(endpoint, A2DP_SBC_SRC_ENDPOINT))
         *codec_index = PA_A2DP_SOURCE_SBC;
+    else if (streq(endpoint, A2DP_APTX_SNK_ENDPOINT))
+        *codec_index = PA_A2DP_SINK_APTX;
+    else if (streq(endpoint, A2DP_APTX_SRC_ENDPOINT))
+        *codec_index = PA_A2DP_SOURCE_APTX;
+    else if (streq(endpoint, A2DP_APTX_HD_SNK_ENDPOINT))
+        *codec_index = PA_A2DP_SINK_APTX_HD;
+    else if (streq(endpoint, A2DP_APTX_HD_SRC_ENDPOINT))
+        *codec_index = PA_A2DP_SOURCE_APTX_HD;
     else if (streq(endpoint, A2DP_LDAC_SRC_ENDPOINT))
         *codec_index = PA_A2DP_SOURCE_LDAC;
     else
@@ -213,6 +239,14 @@ void pa_a2dp_codec_index_to_a2dp_codec(pa_a2dp_codec_index_t codec_index, const 
         case PA_A2DP_SINK_SBC:
         case PA_A2DP_SOURCE_SBC:
             *a2dp_codec = &pa_a2dp_sbc;
+            break;
+        case PA_A2DP_SINK_APTX:
+        case PA_A2DP_SOURCE_APTX:
+            *a2dp_codec = &pa_a2dp_aptx;
+            break;
+        case PA_A2DP_SINK_APTX_HD:
+        case PA_A2DP_SOURCE_APTX_HD:
+            *a2dp_codec = &pa_a2dp_aptx_hd;
             break;
         case PA_A2DP_SOURCE_LDAC:
             *a2dp_codec = &pa_a2dp_ldac;
@@ -236,6 +270,14 @@ void pa_a2dp_a2dp_codec_to_codec_index(const pa_a2dp_codec_t *a2dp_codec, bool i
             if (!a2dp_codec->vendor_codec) {
                 *codec_index = PA_A2DP_CODEC_INDEX_UNAVAILABLE;
                 return;
+            } else if (a2dp_codec->vendor_codec->vendor_id == APTX_VENDOR_ID &&
+                      a2dp_codec->vendor_codec->codec_id == APTX_CODEC_ID) {
+                *codec_index = is_a2dp_sink ? PA_A2DP_SINK_APTX : PA_A2DP_SOURCE_APTX;
+                return;
+            } else if (a2dp_codec->vendor_codec->vendor_id == APTX_HD_VENDOR_ID &&
+                       a2dp_codec->vendor_codec->codec_id == APTX_HD_CODEC_ID) {
+                *codec_index = is_a2dp_sink ? PA_A2DP_SINK_APTX_HD : PA_A2DP_SOURCE_APTX_HD;
+                return;
             } else if (a2dp_codec->vendor_codec->vendor_id == LDAC_VENDOR_ID &&
                 a2dp_codec->vendor_codec->codec_id == LDAC_CODEC_ID) {
                 *codec_index = is_a2dp_sink ? PA_A2DP_CODEC_INDEX_UNAVAILABLE : PA_A2DP_SOURCE_LDAC;
@@ -258,6 +300,12 @@ pa_a2dp_get_a2dp_codec(uint8_t codec, const a2dp_vendor_codec_t *vendor_codec, c
             if (!vendor_codec) {
                 *a2dp_codec = NULL;
                 pa_assert_not_reached();
+            } else if (vendor_codec->vendor_id == APTX_VENDOR_ID && vendor_codec->codec_id == APTX_CODEC_ID) {
+                *a2dp_codec = &pa_a2dp_aptx;
+                return;
+            } else if (vendor_codec->vendor_id == APTX_HD_VENDOR_ID && vendor_codec->codec_id == APTX_HD_CODEC_ID) {
+                *a2dp_codec = &pa_a2dp_aptx_hd;
+                return;
             } else if (vendor_codec->vendor_id == LDAC_VENDOR_ID && vendor_codec->codec_id == LDAC_CODEC_ID) {
                 *a2dp_codec = &pa_a2dp_ldac;
                 return;

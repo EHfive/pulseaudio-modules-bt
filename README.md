@@ -39,6 +39,7 @@ install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packag
 * pulseaudio
 * bluez
 * dbus
+* sbc
 * [Optional] ffmpeg(libavcodec, libavutil) --- APTX, APTX-HD support
 * [Optional] ldacBT_enc.so ldacBT_abr.so   --- LDAC encoding support, LDAC ABR support
 

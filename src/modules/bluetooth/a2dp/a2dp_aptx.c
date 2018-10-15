@@ -130,7 +130,8 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
                uint32_t *timestamp, void **codec_data) {
     const struct rtp_header *header;
     void *p;
-    int ret, i;
+    int ret;
+    size_t i;
     AVPacket *pkt;
     size_t to_decode;
     size_t total_written = 0;
@@ -183,8 +184,8 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
     pa_assert_fp(total_written <= write_buf_size);
 
     for (i = 0; i < av_frame->nb_samples * sizeof(uint32_t); i += sizeof(uint32_t)) {
-        memcpy(write_buf + i * 2, av_frame->data[0] + i, sizeof(uint32_t));
-        memcpy(write_buf + i * 2 + sizeof(uint32_t), av_frame->data[1] + i, sizeof(uint32_t));
+        memcpy((uint8_t *) write_buf + i * 2, av_frame->data[0] + i, sizeof(uint32_t));
+        memcpy((uint8_t *) write_buf + i * 2 + sizeof(uint32_t), av_frame->data[1] + i, sizeof(uint32_t));
     }
 
 done:
@@ -203,7 +204,8 @@ pa_dual_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
     AVFrame *av_frame;
     AVPacket *pkt;
     aptx_info_t *aptx_info = *codec_data;
-    int i, ret;
+    int ret;
+    size_t i;
 
     pa_assert(aptx_info);
     pa_assert(aptx_info->av_codec);
@@ -238,8 +240,8 @@ pa_dual_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
 
 
     for (i = 0; i < av_frame->nb_samples * sizeof(uint32_t); i += sizeof(uint32_t)) {
-        memcpy(av_frame->data[0] + i, p + i * 2, sizeof(uint32_t));
-        memcpy(av_frame->data[1] + i, p + i * 2 + sizeof(uint32_t), sizeof(uint32_t));
+        memcpy(av_frame->data[0] + i, (uint8_t *) p + i * 2, sizeof(uint32_t));
+        memcpy(av_frame->data[1] + i, (uint8_t *) p + i * 2 + sizeof(uint32_t), sizeof(uint32_t));
     }
     *_encoded = 0;
 
@@ -406,14 +408,14 @@ _internal_pa_dual_select_configuration(bool is_hd, const pa_sample_spec default_
     a2dp_aptx_t *cap;
     a2dp_aptx_t *config;
     const size_t cap_size = is_hd ? sizeof(a2dp_aptxhd_t) : sizeof(a2dp_aptx_t);
-    cap = (a2dp_aptx_t *) supported_capabilities;
-
     pa_a2dp_freq_cap_t aptx_freq_cap, aptx_freq_table[] = {
             {16000U, APTX_SAMPLING_FREQ_16000},
             {32000U, APTX_SAMPLING_FREQ_32000},
             {44100U, APTX_SAMPLING_FREQ_44100},
             {48000U, APTX_SAMPLING_FREQ_48000}
     };
+
+    cap = (a2dp_aptx_t *) supported_capabilities;
 
     if (capabilities_size != cap_size)
         return 0;

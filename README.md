@@ -22,7 +22,11 @@ install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packag
 
 ### General Installation
 
-(I also create patch files, you can find them in releases)
+For packager, developer, other PA version user:
+
+I also create patch files, you can find them in releases. Apply patches and recompile/repackage pulseaudio.
+
+And you may use my CmakeList.txt (may also needs modifications) as well, just copy out patched files to src dir and keep file structure.
 
 **Make Dependencies**
 

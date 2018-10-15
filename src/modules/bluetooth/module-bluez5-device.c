@@ -772,12 +772,15 @@ static void setup_stream(struct userdata *u) {
         u->transport->a2dp_sink->setup_stream(&u->a2dp_info.a2dp_sink_data);
         u->transport->a2dp_sink->get_block_size(u->read_link_mtu, &u->read_block_size,
                                                 &u->a2dp_info.a2dp_sink_data);
+        pa_proplist_sets(u->source->proplist, "bluetooth.a2dp_codec", u->transport->a2dp_codec->name);
 
     } else if (u->transport->a2dp_source) {
         u->transport->a2dp_source->setup_stream(&u->a2dp_info.a2dp_source_data);
         u->transport->a2dp_source->get_block_size(u->write_link_mtu, &u->write_block_size,
                                                   &u->a2dp_info.a2dp_source_data);
         a2dp_set_sink(u);
+        pa_proplist_sets(u->sink->proplist, "bluetooth.a2dp_codec", u->transport->a2dp_codec->name);
+
     }
 
     u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
@@ -964,6 +967,8 @@ static int add_source(struct userdata *u) {
                 pa_assert_not_reached();
                 break;
         }
+    else if(u->transport->a2dp_codec && u->transport->a2dp_sink)
+        pa_proplist_sets(data.proplist, "bluetooth.a2dp_codec", u->transport->a2dp_codec->name);
 
     u->source = pa_source_new(u->core, &data, PA_SOURCE_HARDWARE|PA_SOURCE_LATENCY);
     pa_source_new_data_done(&data);
@@ -1139,6 +1144,9 @@ static int add_sink(struct userdata *u) {
                 pa_assert_not_reached();
                 break;
         }
+    else if(u->transport->a2dp_codec && u->transport->a2dp_source)
+        pa_proplist_sets(data.proplist, "bluetooth.a2dp_codec", u->transport->a2dp_codec->name);
+
 
     u->sink = pa_sink_new(u->core, &data, PA_SINK_HARDWARE|PA_SINK_LATENCY);
     pa_sink_new_data_done(&data);

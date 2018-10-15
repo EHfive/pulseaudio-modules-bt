@@ -129,7 +129,7 @@ static size_t
 pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size_t write_buf_size, size_t *_decoded,
                uint32_t *timestamp, void **codec_data) {
     const struct rtp_header *header;
-    const void *p;
+    void *p;
     int ret, i;
     AVPacket *pkt;
     size_t to_decode;
@@ -167,7 +167,6 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
     ret = avcodec_send_packet_func(aptx_info->av_codec_ctx, pkt);
     if (PA_UNLIKELY(ret < 0)) {
         pa_log_debug("Error submitting the packet to the decoder");
-        total_written = 0;
         goto done;
     }
     ret = avcodec_receive_frame_func(aptx_info->av_codec_ctx, av_frame);
@@ -175,7 +174,12 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
         pa_log_debug("Error during decoding");
         goto done;
     }
+
+    *_decoded = aptx_info->aptx_frame_size * av_frame->nb_samples / 4;
+
     total_written = (size_t) av_frame->nb_samples * (4 * 2);
+
+    pa_assert_fp(_decoded <= read_buf_size);
     pa_assert_fp(total_written <= write_buf_size);
 
     for (i = 0; i < av_frame->nb_samples * sizeof(uint32_t); i += sizeof(uint32_t)) {
@@ -332,11 +336,11 @@ static void pa_dual_get_read_block_size(size_t read_link_mtu, size_t *read_block
     size_t rtp_use_size = aptx_info->is_hd ? sizeof(struct rtp_header) : 0;
     pa_assert(aptx_info);
 
-    /* 8*N APTX frame,
-    * PCM 32-bit, 2 channel (4 bytes * 2)
-    * PCM frames/APTX frames == 4
-    * */
-    *read_block_size = (read_link_mtu - rtp_use_size) / (8 * aptx_frame_size) * 8 * (4 * 2) * 4;
+    /*
+    　* PCM 32-bit, 2 channel (4 bytes * 2)
+    　* PCM frames/APTX frames == 4
+    　* */
+    *read_block_size = (read_link_mtu - rtp_use_size) / aptx_frame_size * (4 * 2) * 4;
     aptx_info->block_size = *read_block_size;
 };
 
@@ -346,12 +350,11 @@ static void pa_dual_get_write_block_size(size_t write_link_mtu, size_t *write_bl
     size_t rtp_use_size = aptx_info->is_hd ? sizeof(struct rtp_header) : 0;
     pa_assert(aptx_info);
 
-    /* 8*N APTX frames,
+    /*
      * PCM 32-bit, 2 channel (4 bytes * 2)
      * PCM frames/APTX frames == 4
      * */
-    *write_block_size = (write_link_mtu - rtp_use_size) / (8 * aptx_frame_size) * 8 * (4 * 2) * 4;
-    pa_log_error("write_block_size %lu", *write_block_size);
+    *write_block_size = (write_link_mtu - rtp_use_size) / aptx_frame_size * (4 * 2) * 4;
     aptx_info->block_size = *write_block_size;
 };
 

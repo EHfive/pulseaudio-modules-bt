@@ -33,8 +33,9 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * pulseaudio,libpulse~=12.0
 * bluez-libs/libbluetooth~=5.0
 * libdbus
-* ffmpeg(libavcodec, libavutil) >= 4.0
-* sbc
+* ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
+* libsbc
+* libtool
 * cmake
 * pkg-config
 

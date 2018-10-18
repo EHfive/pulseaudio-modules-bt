@@ -4,8 +4,6 @@ project(pulseaudio_modules_bt C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_C_FLAGS "$ENV{CFLAGS} -O2 -Wall -fno-common -DFASTPATH")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
 set(CMAKE_C_FLAGS "$ENV{CFLAGS} -O2 -Wall -Wno-builtin-macro-redefined -Wno-unused -fno-common -DFASTPATH")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/src/,,$(abspath $<))\"'")
 

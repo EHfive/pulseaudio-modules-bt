@@ -8,6 +8,11 @@ set(CMAKE_C_FLAGS "$ENV{CFLAGS} -O2 -Wall -Wno-builtin-macro-redefined -Wno-unus
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/src/,,$(abspath $<))\"'")
 
 option(FORCE_BUILD_LDAC "Build & Install ldac libraries anyway" OFF)
+option(FORCE_NOT_BUILD_LDAC "Don't build ldac libraries anyway" OFF)
+
+if(("${FORCE_BUILD_LDAC}" STREQUAL "ON") AND ("${FORCE_NOT_BUILD_LDAC}" STREQUAL "ON"))
+    message(FATAL_ERROR "FORCE_BUILD_LDAC and FORCE_NOT_BUILD_LDAC enabled sametime")
+endif()
 
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-D_REENTRANT)
@@ -22,7 +27,8 @@ pkg_check_modules(AVUTIL REQUIRED libavutil>=56.14.100)
 pkg_check_modules(LDACENC "ldacBT-enc")
 pkg_check_modules(LDACABR "ldacBT-abr")
 
-if("${LDACENC_FOUND}" AND "${LDACABR_FOUND}" AND ("${FORCE_BUILD_LDAC}" STREQUAL "OFF"))
+if (("${LDACENC_FOUND}" AND "${LDACABR_FOUND}" AND ("${FORCE_BUILD_LDAC}" STREQUAL "OFF"))
+        OR ("${FORCE_NOT_BUILD_LDAC}" STREQUAL "ON"))
     set(HAVE_SYSTEM_LDAC 1)
     pkg_check_modules(LDACENC REQUIRED "ldacBT-enc")
     pkg_check_modules(LDACABR REQUIRED "ldacBT-abr")

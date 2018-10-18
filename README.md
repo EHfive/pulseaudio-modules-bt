@@ -16,9 +16,11 @@ APTX/APTX_HD sample format fixed to s32 in PA.
 Most LDAC devices do not support 176.4 khz, 192.0 khz. (Or all)
 
 ## Usage
-### Arch Linux
+### Packages
 
-install AUR package [pulseaudio-modules-bt-git](https://aur.archlinux.org/packages/pulseaudio-modules-bt-git/)<sup>AUR</sup>
+[wiki/Packages](https://github.com/EHfive/pulseaudio-modules-bt/wiki/Packages)
+
+also check #3
 
 ### General Installation
 
@@ -48,7 +50,7 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * [Optional] ffmpeg(libavcodec, libavutil) --- APTX, APTX-HD support
 * [Optional] ldacBT_enc.so ldacBT_abr.so   --- LDAC encoding support, LDAC ABR support
 
-Note: ldacBT_enc.so ldacBT_abr.so building statements already included in CMakeLists.txt, you don't need to compile them by yourself (Of course, you could).
+Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and install libldac to PA modules dir.
 
 **backup original pulseaudio bt modules**
 

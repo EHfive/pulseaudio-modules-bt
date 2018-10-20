@@ -27,6 +27,8 @@
 #include <arpa/inet.h>
 #include <sbc/sbc.h>
 
+#include <bluetooth/bluetooth.h>
+
 #include <pulse/rtclock.h>
 #include <pulse/timeval.h>
 #include <pulse/utf8.h>
@@ -1300,6 +1302,76 @@ static void sink_set_a2dp_volume_cb(pa_sink *s) {
     }
 }
 
+static bool disable_absolute_volume_match(const char * bt_addr_str) {
+    bdaddr_t bt_addr;
+    int i;
+    static bdaddr_t affected_bt_addr_cache;
+    static bool effected_bt_addr_cached = false;
+
+    static const struct {
+        bdaddr_t addr;
+        size_t length;
+    }  database[] = {
+
+            // Ausdom M05 - unacceptably loud volume
+            {{{0xa0, 0xe9, 0xdb, 0, 0, 0}}, 3},
+            // iKross IKBT83B HS - unacceptably loud volume
+            {{{0x00, 0x14, 0x02, 0, 0, 0}}, 3},
+            // JayBird BlueBuds X - low granularity on volume control
+            {{{0x44, 0x5e, 0xf3, 0, 0, 0}}, 3},
+            {{{0xd4, 0x9c, 0x28, 0, 0, 0}}, 3},
+            // LG Tone HBS-730 - unacceptably loud volume
+            {{{0x00, 0x18, 0x6b, 0, 0, 0}}, 3},
+            {{{0xb8, 0xad, 0x3e, 0, 0, 0}}, 3},
+            // LG Tone HV-800 - unacceptably loud volume
+            {{{0xa0, 0xe9, 0xdb, 0, 0, 0}}, 3},
+            // Motorola Roadster
+            {{{0x00, 0x24, 0x1C, 0, 0, 0}}, 3},
+            // Mpow Cheetah - unacceptably loud volume
+            {{{0x00, 0x11, 0xb1, 0, 0, 0}}, 3},
+            // SOL REPUBLIC Tracks Air - unable to adjust volume back off from max
+            {{{0xa4, 0x15, 0x66, 0, 0, 0}}, 3},
+            // Swage Rokitboost HS - unacceptably loud volume
+            {{{0x00, 0x14, 0xf1, 0, 0, 0}}, 3},
+            // VW Car Kit - not enough granularity with volume
+            {{{0x00, 0x26, 0x7e, 0, 0, 0}}, 3},
+            {{{0x90, 0x03, 0xb7, 0, 0, 0}}, 3},
+            // deepblue2 - cannot change smoothly the volume, 0x b/37834035
+            {{{0x0c, 0xa6, 0x94, 0, 0, 0}}, 3}
+    };
+
+    for (i = 0; i < 6; ++i, bt_addr_str += 3)
+        bt_addr.b[i] = (uint8_t) strtol(bt_addr_str, NULL, 16);
+
+    if (effected_bt_addr_cached){
+        int j;
+        bool flag = true;
+        for (j = 0; j < 6; ++j)
+            if (affected_bt_addr_cache.b[j] != bt_addr.b[j]){
+                flag = false;
+                break;
+            }
+        if(flag)
+            return true;
+    }
+
+    for(i = 0; i < PA_ELEMENTSOF(database); ++i){
+        int j;
+        bool flag = true;
+        for(j = 0; j < database[i].length; ++j)
+            if(database[i].addr.b[j] != bt_addr.b[j]){
+                flag = false;
+                break;
+            }
+        if(flag){
+            affected_bt_addr_cache = bt_addr;
+            effected_bt_addr_cached = true;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Run from main thread */
 static int add_sink(struct userdata *u) {
     pa_sink_new_data data;
@@ -1355,6 +1427,8 @@ static int add_sink(struct userdata *u) {
         pa_sink_set_set_volume_callback(u->sink, sink_set_volume_cb);
         u->sink->n_volume_steps = 16;
     } else if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SINK) {
+        if(disable_absolute_volume_match(u->device->address))
+            return 0;
         pa_sink_set_set_volume_callback(u->sink, sink_set_a2dp_volume_cb);
         u->sink->n_volume_steps = 1;
     }
@@ -2424,7 +2498,14 @@ static pa_hook_result_t transport_a2dp_gain_changed_cb(pa_bluetooth_discovery *y
     if (t != u->transport)
         return PA_HOOK_OK;
 
+    if(disable_absolute_volume_match(u->device->address))
+        return PA_HOOK_OK;
+
     gain = t->a2dp_gain;
+    /* Mute when gain equal 1 */
+    if (gain <= 1)
+        gain = 0;
+
     volume = (pa_volume_t) (gain * PA_VOLUME_NORM / BLUEZ_MAX_GAIN);
 
     pa_cvolume_set(&v, u->sample_spec.channels, volume);
@@ -2437,7 +2518,6 @@ static pa_hook_result_t transport_a2dp_gain_changed_cb(pa_bluetooth_discovery *y
             pa_sink_set_set_volume_callback(u->sink, sink_set_a2dp_volume_cb);
         }
 
-
         if (gain == 0)
             pa_sink_mute_changed(u->sink, true);
         else if(u->sink->muted)
@@ -2447,13 +2527,12 @@ static pa_hook_result_t transport_a2dp_gain_changed_cb(pa_bluetooth_discovery *y
     } else if(u->profile == PA_BLUETOOTH_PROFILE_A2DP_SOURCE){
         pa_assert(u->source);
 
-
         if (gain == 0)
             pa_source_mute_changed(u->source, true);
         else if(u->source->muted)
             pa_source_mute_changed(u->source, false);
 
-        pa_source_volume_changed(u->source, &v);
+        pa_source_set_volume(u->source, &v, true, true);
     }
 
 

@@ -47,6 +47,7 @@
 #define BLUEZ_MEDIA_TRANSPORT_INTERFACE BLUEZ_SERVICE ".MediaTransport1"
 
 #define BLUEZ_ERROR_NOT_SUPPORTED "org.bluez.Error.NotSupported"
+#define BLUEZ_ERROR_IN_PROGRESS "org.bluez.Error.InProgress"
 
 
 #define ENDPOINT_INTROSPECT_XML                                         \
@@ -757,6 +758,17 @@ static void parse_device_property(pa_bluetooth_device *d, DBusMessageIter *i) {
             break;
         }
 
+        case DBUS_TYPE_BOOLEAN: {
+            bool value;
+            dbus_message_iter_get_basic(&variant_i, &value);
+            if (pa_streq(key, "Connected")) {
+                d->connected_handled = !value;
+                pa_log_debug("%s: %d", key, value);
+            }
+
+            break;
+        }
+
         case DBUS_TYPE_ARRAY: {
             DBusMessageIter ai;
             dbus_message_iter_recurse(&variant_i, &ai);
@@ -923,6 +935,53 @@ static void register_endpoint(pa_bluetooth_discovery *y, const char *path, const
     dbus_message_iter_close_container(&i, &d);
 
     send_and_add_to_pending(y, m, register_endpoint_reply, pa_xstrdup(endpoint));
+}
+
+static void device_connect_profile_reply(DBusPendingCall *pending, void *userdata) {
+    DBusMessage *r;
+    pa_dbus_pending *p;
+    pa_bluetooth_discovery *y;
+    char *uuid;
+    const char *path;
+
+    pa_assert(pending);
+    pa_assert_se(p = userdata);
+    pa_assert_se(y = p->context_data);
+    pa_assert_se(uuid = p->call_data);
+    pa_assert_se(r = dbus_pending_call_steal_reply(pending));
+
+    if (dbus_message_is_error(r, BLUEZ_ERROR_IN_PROGRESS)) {
+        pa_log_debug(BLUEZ_DEVICE_INTERFACE ".ConnectProfile(%s) is in progress", uuid);
+        goto finish;
+    }
+
+    if (dbus_message_get_type(r) == DBUS_MESSAGE_TYPE_ERROR) {
+        pa_log_error(BLUEZ_DEVICE_INTERFACE ".ConnectProfile(%s) failed: %s: %s", uuid, dbus_message_get_error_name(r),
+                     pa_dbus_get_error_message(r));
+        goto finish;
+    }
+
+finish:
+    dbus_message_unref(r);
+
+    PA_LLIST_REMOVE(pa_dbus_pending, y->pending, p);
+    pa_dbus_pending_free(p);
+
+    pa_xfree(uuid);
+}
+
+static void device_connect_profile(pa_bluetooth_discovery *y,const char *path, const char *uuid) {
+    DBusMessage *m;
+    DBusMessageIter i;
+
+    pa_log_debug("ConnectProfile UUID:%s path:%s", uuid, path);
+
+    pa_assert_se(m = dbus_message_new_method_call(BLUEZ_SERVICE, path, BLUEZ_DEVICE_INTERFACE, "ConnectProfile"));
+
+    dbus_message_iter_init_append(m, &i);
+    pa_assert_se(dbus_message_iter_append_basic(&i, DBUS_TYPE_STRING, &uuid));
+
+    send_and_add_to_pending(y, m, device_connect_profile_reply, pa_xstrdup(uuid));
 }
 
 static void parse_interfaces_and_properties(pa_bluetooth_discovery *y, DBusMessageIter *dict_i) {
@@ -1248,6 +1307,13 @@ static DBusHandlerResult filter_cb(DBusConnection *bus, DBusMessage *m, void *us
                 return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
             parse_device_properties(d, &arg_i);
+
+            if(!d->connected_handled){
+                if (pa_hashmap_get(d->uuids, PA_BLUETOOTH_UUID_A2DP_SINK))
+                    device_connect_profile(y, dbus_message_get_path(m), PA_BLUETOOTH_UUID_A2DP_SINK);
+                d->connected_handled = true;
+            }
+
         } else if (pa_streq(iface, BLUEZ_MEDIA_TRANSPORT_INTERFACE)) {
             pa_bluetooth_transport *t;
 

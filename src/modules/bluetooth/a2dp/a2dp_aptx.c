@@ -470,7 +470,7 @@ static bool _internal_pa_dual_set_configuration(bool is_hd, const uint8_t *selec
         case APTX_SAMPLING_FREQ_48000:
             break;
         default:
-            pa_log_error("Invalid sampling frequency in SBC configuration");
+            pa_log_error("Invalid sampling frequency in APTX configuration");
             return false;
     }
 
@@ -478,7 +478,7 @@ static bool _internal_pa_dual_set_configuration(bool is_hd, const uint8_t *selec
         case APTX_CHANNEL_MODE_STEREO:
             break;
         default:
-            pa_log_error("Invalid channel mode in SBC Configuration");
+            pa_log_error("Invalid channel mode in APTX Configuration");
             return false;
     }
     return true;

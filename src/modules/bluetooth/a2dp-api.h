@@ -136,14 +136,14 @@ struct pa_a2dp_codec {
 
 typedef struct a_a2dp_freq_cap {
     uint32_t rate;
-    uint8_t cap;
+    uint32_t cap;
 } pa_a2dp_freq_cap_t;
 
 
 
 /* Utils */
 
-bool pa_a2dp_select_cap_frequency(uint8_t freq_cap, pa_sample_spec default_sample_spec,
+bool pa_a2dp_select_cap_frequency(uint32_t freq_cap, pa_sample_spec default_sample_spec,
                                   const pa_a2dp_freq_cap_t *freq_cap_table,
                                   size_t n, pa_a2dp_freq_cap_t *result);
 

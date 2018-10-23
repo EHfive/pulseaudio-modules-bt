@@ -470,7 +470,7 @@ pa_ldac_select_configuration(const pa_sample_spec default_sample_spec, const uin
                                       PA_ELEMENTSOF(ldac_freq_table), &ldac_freq_cap))
         return 0;
 
-    config->frequency = ldac_freq_cap.cap;
+    config->frequency = (uint8_t) ldac_freq_cap.cap;
 
     if (default_sample_spec.channels <= 1) {
         if (cap->channel_mode & LDACBT_CHANNEL_MODE_MONO)

@@ -330,7 +330,7 @@ bool pa_a2dp_codec_index_is_source(pa_a2dp_codec_index_t codec_index) {
 };
 
 bool
-pa_a2dp_select_cap_frequency(uint8_t freq_cap, pa_sample_spec default_sample_spec,
+pa_a2dp_select_cap_frequency(uint32_t freq_cap, pa_sample_spec default_sample_spec,
                              const pa_a2dp_freq_cap_t *freq_cap_table,
                              size_t n, pa_a2dp_freq_cap_t *result) {
     int i;

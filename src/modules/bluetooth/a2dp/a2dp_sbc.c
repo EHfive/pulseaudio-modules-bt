@@ -472,7 +472,7 @@ pa_sbc_select_configuration(const pa_sample_spec default_sample_spec, const uint
                                       PA_ELEMENTSOF(sbc_freq_table), &sbc_freq_cap))
         return 0;
 
-    config->frequency = sbc_freq_cap.cap;
+    config->frequency = (uint8_t) sbc_freq_cap.cap;
 
     if (default_sample_spec.channels <= 1) {
         if (cap->channel_mode & SBC_CHANNEL_MODE_MONO)

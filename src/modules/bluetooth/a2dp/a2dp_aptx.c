@@ -434,7 +434,7 @@ _internal_pa_dual_select_configuration(bool is_hd, const pa_sample_spec default_
                                       PA_ELEMENTSOF(aptx_freq_table), &aptx_freq_cap))
         return 0;
 
-    config->frequency = aptx_freq_cap.cap;
+    config->frequency = (uint8_t) aptx_freq_cap.cap;
 
     if (cap->channel_mode & APTX_CHANNEL_MODE_STEREO)
         config->channel_mode = APTX_CHANNEL_MODE_STEREO;

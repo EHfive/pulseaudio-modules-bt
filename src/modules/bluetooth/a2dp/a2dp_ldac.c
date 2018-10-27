@@ -437,8 +437,7 @@ static size_t pa_ldac_get_capabilities(void **_capabilities) {
     capabilities->info.vendor_id = LDAC_VENDOR_ID;
     capabilities->info.codec_id = LDAC_CODEC_ID;
     capabilities->frequency = LDACBT_SAMPLING_FREQ_044100 | LDACBT_SAMPLING_FREQ_048000 |
-                              LDACBT_SAMPLING_FREQ_088200 | LDACBT_SAMPLING_FREQ_096000 |
-                              LDACBT_SAMPLING_FREQ_176400 | LDACBT_SAMPLING_FREQ_192000;
+                              LDACBT_SAMPLING_FREQ_088200 | LDACBT_SAMPLING_FREQ_096000;
     capabilities->channel_mode = LDACBT_CHANNEL_MODE_MONO | LDACBT_CHANNEL_MODE_DUAL_CHANNEL |
                                  LDACBT_CHANNEL_MODE_STEREO;
     *_capabilities = capabilities;
@@ -455,9 +454,7 @@ pa_ldac_select_configuration(const pa_sample_spec default_sample_spec, const uin
             {44100U,  LDACBT_SAMPLING_FREQ_044100},
             {48000U,  LDACBT_SAMPLING_FREQ_048000},
             {88200U,  LDACBT_SAMPLING_FREQ_088200},
-            {96000U,  LDACBT_SAMPLING_FREQ_096000},
-            {176400U, LDACBT_SAMPLING_FREQ_176400},
-            {192000U, LDACBT_SAMPLING_FREQ_192000}
+            {96000U,  LDACBT_SAMPLING_FREQ_096000}
     };
 
     if (capabilities_size != sizeof(a2dp_ldac_t))

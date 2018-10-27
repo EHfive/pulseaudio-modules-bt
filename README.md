@@ -9,11 +9,9 @@ and add LDAC, APTX, APTX-HD support
 |:---:|:---:|:---:|:---:|:---:|
 |APTX | ✔| ✔ |s16|16-48 khz|
 |APTX HD| ✔| ✔ |s24|16-48 khz|
-|LDAC |✔ |✘|s16,s24,s32,f32|44.1-192.0 khz|
+|LDAC |✔ |✘|s16,s24,s32,f32|44.1-96 khz|
 
 APTX/APTX_HD sample format fixed to s32 in PA.
-
-Most LDAC devices do not support 176.4 khz, 192.0 khz. (Or all)
 
 ## Usage
 ### Packages

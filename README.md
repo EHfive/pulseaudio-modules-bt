@@ -2,14 +2,15 @@
 
 this repo is a fork of pulseaudio bluetooth modules
 
-and add LDAC, APTX, APTX-HD support
+and add LDAC, APTX, APTX-HD, AAC support
 
 #### Added Codecs
 |Codec|Encoding(source role)|Decoding(sink role)|Sample format|Sample frequnecy|
 |:---:|:---:|:---:|:---:|:---:|
-|APTX | ✔| ✔ |s16|16-48 khz|
-|APTX HD| ✔| ✔ |s24|16-48 khz|
-|LDAC |✔ |✘|s16,s24,s32,f32|44.1-96 khz|
+|AAC |✔ |✔ |s16,s32|8..96 khz|
+|APTX | ✔| ✔ |s16|16..48 khz|
+|APTX HD| ✔| ✔ |s24|16..48 khz|
+|LDAC |✔ |✘|s16,s24,s32,f32|44.1..96 khz|
 
 APTX/APTX_HD sample format fixed to s32 in PA.
 
@@ -35,6 +36,7 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * libdbus
 * ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
 * libsbc
+* libfdk-aac
 * libtool
 * cmake
 * pkg-config
@@ -45,6 +47,7 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * bluez
 * dbus
 * sbc
+* libfdk-aac
 * [Optional] ffmpeg(libavcodec, libavutil) --- APTX, APTX-HD support
 * [Optional] ldacBT_enc.so ldacBT_abr.so   --- LDAC encoding support, LDAC ABR support
 
@@ -105,6 +108,12 @@ as an alternative, you can fix it with this [udev script](https://gist.github.co
 ||s32|32-bit signed|
 ||f32|32-bit float|
 ||auto|Ref default-sample-format|
+|aac_bitrate_mode|\[1, 5\]|Variable Bitrate (VBR)|5|
+||0|Constant Bitrate (CBR)|
+|aac_after_buffer|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
+|aac_fmt|s16|16-bit signed (little endian)|auto|
+||s32|32-bit signed|
+||auto|Ref default-sample-format|
 
 #### config
 
@@ -118,7 +127,7 @@ append arguments to 'load-module module-bluetooth-discover'
     load-module module-bluetooth-discover a2dp_config="ldac_eqmid=sq"
 
     # LDAC High Quality; Force LDAC/PA PCM sample format as Float32LE
-    load-module module-bluetooth-discover a2dp_config="ldac_eqmid=hq ldac_fmt=f32"
+    #load-module module-bluetooth-discover a2dp_config="ldac_eqmid=hq ldac_fmt=f32"
 
 
 equivalent to commands below if you do not use 'module-bluetooth-discover'
@@ -137,5 +146,5 @@ see [Wiki](https://github.com/EHfive/pulseaudio-modules-bt/wiki)
 
 ~~add APTX , APTX HD Codec support using ffmpeg~~
 
-add AAC support using Fraunhofer FDK AAC codec library or FFmpeg
+~~add AAC support using Fraunhofer FDK AAC codec library~~
 

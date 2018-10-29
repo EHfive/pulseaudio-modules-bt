@@ -11,6 +11,9 @@
 #define A2DP_SBC_SRC_ENDPOINT A2DP_SOURCE_ENDPOINT "/SBC"
 #define A2DP_SBC_SNK_ENDPOINT A2DP_SINK_ENDPOINT "/SBC"
 
+#define A2DP_AAC_SRC_ENDPOINT A2DP_SOURCE_ENDPOINT "/AAC"
+#define A2DP_AAC_SNK_ENDPOINT A2DP_SINK_ENDPOINT "/AAC"
+
 #define A2DP_VENDOR_SRC_ENDPOINT A2DP_SOURCE_ENDPOINT "/VENDOR"
 #define A2DP_VENDOR_SNK_ENDPOINT A2DP_SINK_ENDPOINT "/VENDOR"
 
@@ -195,6 +198,12 @@ void pa_a2dp_codec_index_to_endpoint(pa_a2dp_codec_index_t codec_index, const ch
         case PA_A2DP_SOURCE_SBC:
             *endpoint = A2DP_SBC_SRC_ENDPOINT;
             break;
+        case PA_A2DP_SINK_AAC:
+            *endpoint = A2DP_AAC_SNK_ENDPOINT;
+            break;
+        case PA_A2DP_SOURCE_AAC:
+            *endpoint = A2DP_AAC_SRC_ENDPOINT;
+            break;
         case PA_A2DP_SINK_APTX:
             *endpoint = A2DP_APTX_SNK_ENDPOINT;
             break;
@@ -220,6 +229,10 @@ void pa_a2dp_endpoint_to_codec_index(const char *endpoint, pa_a2dp_codec_index_t
         *codec_index = PA_A2DP_SINK_SBC;
     else if (streq(endpoint, A2DP_SBC_SRC_ENDPOINT))
         *codec_index = PA_A2DP_SOURCE_SBC;
+    else if (streq(endpoint, A2DP_AAC_SNK_ENDPOINT))
+        *codec_index = PA_A2DP_SINK_AAC;
+    else if (streq(endpoint, A2DP_AAC_SRC_ENDPOINT))
+        *codec_index = PA_A2DP_SOURCE_AAC;
     else if (streq(endpoint, A2DP_APTX_SNK_ENDPOINT))
         *codec_index = PA_A2DP_SINK_APTX;
     else if (streq(endpoint, A2DP_APTX_SRC_ENDPOINT))
@@ -239,6 +252,10 @@ void pa_a2dp_codec_index_to_a2dp_codec(pa_a2dp_codec_index_t codec_index, const 
         case PA_A2DP_SINK_SBC:
         case PA_A2DP_SOURCE_SBC:
             *a2dp_codec = &pa_a2dp_sbc;
+            break;
+        case PA_A2DP_SINK_AAC:
+        case PA_A2DP_SOURCE_AAC:
+            *a2dp_codec = &pa_a2dp_aac;
             break;
         case PA_A2DP_SINK_APTX:
         case PA_A2DP_SOURCE_APTX:
@@ -265,6 +282,9 @@ void pa_a2dp_a2dp_codec_to_codec_index(const pa_a2dp_codec_t *a2dp_codec, bool i
     switch (a2dp_codec->codec) {
         case A2DP_CODEC_SBC:
             *codec_index = is_a2dp_sink ? PA_A2DP_SINK_SBC : PA_A2DP_SOURCE_SBC;
+            return;
+        case A2DP_CODEC_MPEG24:
+            *codec_index = is_a2dp_sink ? PA_A2DP_SINK_AAC : PA_A2DP_SOURCE_AAC;
             return;
         case A2DP_CODEC_VENDOR:
             if (!a2dp_codec->vendor_codec) {
@@ -295,6 +315,9 @@ pa_a2dp_get_a2dp_codec(uint8_t codec, const a2dp_vendor_codec_t *vendor_codec, c
     switch (codec) {
         case A2DP_CODEC_SBC:
             *a2dp_codec = &pa_a2dp_sbc;
+            return;
+        case A2DP_CODEC_MPEG24:
+            *a2dp_codec = &pa_a2dp_aac;
             return;
         case A2DP_CODEC_VENDOR:
             if (!vendor_codec) {

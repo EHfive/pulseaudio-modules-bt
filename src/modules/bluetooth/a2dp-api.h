@@ -22,6 +22,7 @@ typedef struct pa_a2dp_codec pa_a2dp_codec_t;
 typedef struct pa_a2dp_config pa_a2dp_config_t;
 
 extern const pa_a2dp_codec_t pa_a2dp_sbc;
+extern const pa_a2dp_codec_t pa_a2dp_aac;
 extern const pa_a2dp_codec_t pa_a2dp_aptx;
 extern const pa_a2dp_codec_t pa_a2dp_aptx_hd;
 extern const pa_a2dp_codec_t pa_a2dp_ldac;
@@ -37,11 +38,13 @@ typedef void (*pa_a2dp_source_read_buf_free_cb_t)(const void **read_buf, void *d
 typedef enum pa_a2dp_codec_index {
     PA_A2DP_SINK_MIN,
     PA_A2DP_SINK_SBC,
+    PA_A2DP_SINK_AAC,
     PA_A2DP_SINK_APTX,
     PA_A2DP_SINK_APTX_HD,
     PA_A2DP_SINK_MAX,
     PA_A2DP_SOURCE_MIN = PA_A2DP_SINK_MAX,
     PA_A2DP_SOURCE_SBC,
+    PA_A2DP_SOURCE_AAC,
     PA_A2DP_SOURCE_APTX,
     PA_A2DP_SOURCE_APTX_HD,
     PA_A2DP_SOURCE_LDAC,

@@ -404,7 +404,7 @@ pa_aac_config_transport(pa_sample_spec default_sample_spec, const void *configur
 
     /* AAC SINK */
     if (aac_info->is_a2dp_sink) {
-        if (!aac_info->aacenc_handle_opened) {
+        if (!aac_info->aacdecoder_handle_opened) {
             aac_info->aacdecoder_handle = aacDecoder_Open(TT_MP4_LATM_MCP1, 1);
             aac_info->aacdecoder_handle_opened = true;
         }

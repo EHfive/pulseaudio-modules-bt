@@ -53,19 +53,28 @@ include_directories(${FDKAAC_INCLUDE_DIRS})
 
 link_directories(${PulseAudio_CORE_LIBDIR})
 
+
+string(REGEX MATCH "[0-9]+(\\.[0-9]+)*" PulseAudio_lib_version ${PulseAudio_VERSION})
+if("" STREQUAL "${PulseAudio_lib_version}")
+    message(SEND_ERROR "Can't match libpulse version")
+    set(PulseAudio_lib_version ${PulseAudio_VERSION})
+    message(WARNING "SET PulseAudio_lib_version = ${PulseAudio_VERSION}")
+endif()
+
+
 execute_process(COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=modlibexecdir libpulse
         OUTPUT_VARIABLE PulseAudio_modlibexecdir
         OUTPUT_STRIP_TRAILING_WHITESPACE)
 if("" STREQUAL "${PulseAudio_modlibexecdir}")
     message(SEND_ERROR "Can't found variable modlibexecdir in libpulse.pc")
-    set(PulseAudio_modlibexecdir ${PulseAudio_LIBDIR}/pulse-${PulseAudio_VERSION}/modules)
+    set(PulseAudio_modlibexecdir ${PulseAudio_LIBDIR}/pulse-${PulseAudio_lib_version}/modules)
     message(WARNING "SET PulseAudio_modlibexecdir = ${PulseAudio_modlibexecdir}")
 endif()
 
 
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/config.h")
 
-set(MOD_LIBS ${PulseAudio_LIBRARIES} pthread pulsecommon-${PulseAudio_VERSION} pulsecore-${PulseAudio_VERSION})
+set(MOD_LIBS ${PulseAudio_LIBRARIES} pthread pulsecommon-${PulseAudio_lib_version} pulsecore-${PulseAudio_lib_version})
 set(CMAKE_INSTALL_RPATH ${PulseAudio_CORE_LIBDIR}:${PulseAudio_modlibexecdir})
 
 if(NOT ${HAVE_SYSTEM_LDAC})

@@ -68,7 +68,7 @@ git clone https://github.com/EHfive/pulseaudio-modules-bt.git
 cd pulseaudio-modules-bt
 git submodule update --init
 
-git -C pa/ checkout v`pkg-config libpulse --modversion`
+git -C pa/ checkout v`pkg-config libpulse --modversion|sed 's/[^0-9.]*\([0-9.]*\).*/\1/'`
 
 mkdir build && cd build
 cmake ..

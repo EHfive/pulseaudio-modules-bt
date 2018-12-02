@@ -2136,7 +2136,7 @@ endif
 
 libbluez5_util_la_LDFLAGS = -avoid-version
 libbluez5_util_la_LIBADD = $(MODULE_LIBADD) $(SBC_LIBS) $(DBUS_LIBS)
-libbluez5_util_la_CFLAGS = $(AM_CFLAGS) $(SBC_CFLAGS) $(DBUS_CFLAGS)
+libbluez5_util_la_CFLAGS = $(AM_CFLAGS) $(SBC_CFLAGS) $(DBUS_CFLAGS) $(FF_AVCODEC_CFLAGS) $(FF_AVUTIL_CFLAGS)
 
 module_bluez5_discover_la_SOURCES = modules/bluetooth/module-bluez5-discover.c
 module_bluez5_discover_la_LDFLAGS = $(MODULE_LDFLAGS)

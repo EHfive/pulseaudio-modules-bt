@@ -8,7 +8,7 @@
 
 #define streq(a, b) (!strcmp((a),(b)))
 
-#define AAC_DEFAULT_BITRATE 320000
+#define AAC_DEFAULT_BITRATE 320000u
 
 typedef struct aac_info {
     pa_a2dp_source_read_cb_t read_pcm;
@@ -126,7 +126,7 @@ pa_aac_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size_
               uint32_t *timestamp, void **codec_data) {
     const struct rtp_header *header;
     const UCHAR *p;
-    void *d;
+    INT_PCM *d;
     UINT to_decode, pkt_size;
     UINT total_written = 0;
     aac_info_t *aac_info = *codec_data;
@@ -185,8 +185,8 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
               void **codec_data) {
     struct rtp_header *header;
     size_t nbytes;
-    void *d;
-    const void *p;
+    uint8_t *d;
+    const uint8_t *p;
     int to_write;
     unsigned frame_count;
     aac_info_t *aac_info = *codec_data;
@@ -225,7 +225,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
 
     frame_count = 0;
 
-    aac_info->read_pcm(&p, (size_t) in_bufSizes[0], read_cb_data);
+    aac_info->read_pcm((const void **) &p, (size_t) in_bufSizes[0], read_cb_data);
 
     in_bufDesc.bufs[0] = (void *) p;
 
@@ -244,7 +244,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
 
         if (PA_UNLIKELY(aac_err != AACENC_OK)) {
             pa_log_error("AAC encoding error, 0x%x", aac_err);
-            aac_info->read_buf_free(&p, read_cb_data);
+            aac_info->read_buf_free((const void **) &p, read_cb_data);
             *_encoded = 0;
             return 0;
         }
@@ -261,7 +261,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
         frame_count++;
     }
 
-    aac_info->read_buf_free(&p, read_cb_data);
+    aac_info->read_buf_free((const void **) &p, read_cb_data);
 
     memset(write_buf, 0, sizeof(*header));
     header->v = 2;
@@ -270,7 +270,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
     header->timestamp = htonl(timestamp);
     header->ssrc = htonl(1);
 
-    nbytes = (uint8_t *) d - (uint8_t *) write_buf;
+    nbytes = d - (uint8_t *) write_buf;
 
     return nbytes;
 }
@@ -510,10 +510,10 @@ static void pa_aac_get_write_block_size(size_t write_link_mtu, size_t *write_blo
 static void pa_aac_setup_stream(void **codec_data) {
     AACENC_ERROR aac_err;
     aac_info_t *aac_info = *codec_data;
-    int max_bitrate;
+    uint32_t max_bitrate;
     pa_assert(aac_info);
 
-    max_bitrate = (int) ((8 * (aac_info->mtu - sizeof(struct rtp_header)) * aac_info->sample_spec.rate) / 1024);
+    max_bitrate = (uint32_t) ((8 * (aac_info->mtu - sizeof(struct rtp_header)) * aac_info->sample_spec.rate) / 1024);
 
     aac_info->bitrate = PA_MIN(max_bitrate, aac_info->bitrate);
 

@@ -1060,7 +1060,7 @@ PA_MACHINE_ID_FALLBACK="${localstatedir}/lib/dbus/machine-id"
 AX_DEFINE_DIR(PA_MACHINE_ID_FALLBACK, PA_MACHINE_ID_FALLBACK,
 	      [Fallback machine-id file])
 
-#### BlueZ support (optional, dependent on FFmpeg, D-Bus and SBC) ####
+#### BlueZ support (optional, dependent on FFmpeg, FDK-AAC, D-Bus and SBC) ####
 
 AC_ARG_ENABLE([bluez5],
     AS_HELP_STRING([--disable-bluez5],[Disable optional BlueZ 5 support]))
@@ -1069,6 +1069,12 @@ AC_ARG_ENABLE([bluez5],
 AS_IF([test "x$enable_bluez5" != "xno"],
     [PKG_CHECK_MODULES(SBC, [ sbc >= 1.0 ], HAVE_SBC=1, HAVE_SBC=0)],
     HAVE_SBC=0)
+
+## FDK-AAC ##
+AS_IF([test "x$enable_bluez5" != "xno"],
+    [PKG_CHECK_MODULES(FDK_AAC, [ fdk-aac >= 0.1.5 ], HAVE_FDK_AAC=1, HAVE_FDK_AAC=0)],
+    HAVE_FDK_AAC=0)
+
 
 ## FFmpeg libavcodec ##
 AS_IF([test "x$enable_bluez5" != "xno"],
@@ -1079,10 +1085,10 @@ AS_IF([test "x$enable_bluez5" != "xno"],
     HAVE_FF_AVUTIL=0)
 
 ## BlueZ 5 ##
-AS_IF([test "x$enable_bluez5" != "xno" && test "x$HAVE_DBUS" = "x1" && test "x$HAVE_SBC" = "x1" && test "x$HAVE_FF_AVCODEC" = "x1" && test "x$HAVE_FF_AVUTIL" = "x1"], HAVE_BLUEZ_5=1,
+AS_IF([test "x$enable_bluez5" != "xno" && test "x$HAVE_DBUS" = "x1" && test "x$HAVE_SBC" = "x1" && test "x$HAVE_FDK_AAC" = "x1" && test "x$HAVE_FF_AVCODEC" = "x1" && test "x$HAVE_FF_AVUTIL" = "x1"], HAVE_BLUEZ_5=1,
       HAVE_BLUEZ_5=0)
 AS_IF([test "x$enable_bluez5" = "xyes" && test "x$HAVE_BLUEZ_5" != "x1"],
-    [AC_MSG_ERROR([*** BLUEZ 5 support not found (requires FFmpeg, sbc and D-Bus)])])
+    [AC_MSG_ERROR([*** BLUEZ 5 support not found (requires FFmpeg, FDK-AAC, sbc and D-Bus)])])
 AC_SUBST(HAVE_BLUEZ_5)
 AM_CONDITIONAL([HAVE_BLUEZ_5], [test "x$HAVE_BLUEZ_5" = x1])
 

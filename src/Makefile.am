@@ -2118,6 +2118,7 @@ libbluez5_util_la_SOURCES = \
 		modules/bluetooth/bluez5-util.c \
 		modules/bluetooth/a2dp/a2dp_util.c \
 		modules/bluetooth/a2dp/a2dp_sbc.c \
+		modules/bluetooth/a2dp/a2dp_aac.c \
 		modules/bluetooth/a2dp/a2dp_aptx.c \
 		modules/bluetooth/a2dp/a2dp_ldac.c \
 		modules/bluetooth/a2dp-api.h \
@@ -2135,8 +2136,8 @@ libbluez5_util_la_SOURCES += \
 endif
 
 libbluez5_util_la_LDFLAGS = -avoid-version
-libbluez5_util_la_LIBADD = $(MODULE_LIBADD) $(SBC_LIBS) $(DBUS_LIBS)
-libbluez5_util_la_CFLAGS = $(AM_CFLAGS) $(SBC_CFLAGS) $(DBUS_CFLAGS) $(FF_AVCODEC_CFLAGS) $(FF_AVUTIL_CFLAGS)
+libbluez5_util_la_LIBADD = $(MODULE_LIBADD) $(SBC_LIBS) $(DBUS_LIBS) $(FDK_AAC_LIBS)
+libbluez5_util_la_CFLAGS = $(AM_CFLAGS) $(SBC_CFLAGS) $(DBUS_CFLAGS) $(FF_AVCODEC_CFLAGS) $(FF_AVUTIL_CFLAGS) $(FDK_AAC_CFLAGS)
 
 module_bluez5_discover_la_SOURCES = modules/bluetooth/module-bluez5-discover.c
 module_bluez5_discover_la_LDFLAGS = $(MODULE_LDFLAGS)

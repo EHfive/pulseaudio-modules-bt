@@ -1073,10 +1073,10 @@ AS_IF([test "x$enable_bluez5" != "xno"],
 ## FFmpeg libavcodec ##
 AS_IF([test "x$enable_bluez5" != "xno"],
     [PKG_CHECK_MODULES(FF_AVCODEC, [ libavcodec >= 58.18.100 ], HAVE_FF_AVCODEC=1, HAVE_FF_AVCODEC=0)],
-    HAVE_SBC=0)
+    HAVE_FF_AVCODEC=0)
 AS_IF([test "x$enable_bluez5" != "xno"],
     [PKG_CHECK_MODULES(FF_AVUTIL, [ libavcodec >= 56.14.100 ], HAVE_FF_AVUTIL=1, HAVE_FF_AVUTIL=0)],
-    HAVE_SBC=0)
+    HAVE_FF_AVUTIL=0)
 
 ## BlueZ 5 ##
 AS_IF([test "x$enable_bluez5" != "xno" && test "x$HAVE_DBUS" = "x1" && test "x$HAVE_SBC" = "x1" && test "x$HAVE_FF_AVCODEC" = "x1" && test "x$HAVE_FF_AVUTIL" = "x1"], HAVE_BLUEZ_5=1,

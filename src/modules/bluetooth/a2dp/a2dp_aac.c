@@ -31,7 +31,7 @@ typedef struct aac_info {
     /* Constant Bitrate: 0
      * Variable Bitrate: 1-5 (Only effective when both bluetooth devices support vbr) */
     int aac_enc_bitrate_mode;
-    uint32_t aac_after_buffer;
+    uint32_t aac_afterburner;
     pa_sample_format_t force_pa_fmt;
 
     pa_sample_spec sample_spec;
@@ -68,20 +68,20 @@ pa_aac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
     info->read_buf_free = free_cb;
     info->aacenc_handle_opened = false;
     info->aac_enc_bitrate_mode = 5;
-    info->aac_after_buffer = false;
+    info->aac_afterburner = false;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
     return true;
 }
 
 static int pa_aac_update_user_config(pa_proplist *user_config, void **codec_data) {
     aac_info_t *i = *codec_data;
-    const char *aac_bitrate_mode_str, *aac_fmt_str, *aac_after_buffer_str;
+    const char *aac_bitrate_mode_str, *aac_fmt_str, *aac_afterburner_str;
     int aac_bitrate_mode = 0, ret = 0;
     pa_assert(i);
 
     aac_bitrate_mode_str = pa_proplist_gets(user_config, "aac_bitrate_mode");
     aac_fmt_str = pa_proplist_gets(user_config, "aac_fmt");
-    aac_after_buffer_str = pa_proplist_gets(user_config, "aac_after_buffer");
+    aac_afterburner_str = pa_proplist_gets(user_config, "aac_afterburner");
 
     if (aac_bitrate_mode_str) {
         aac_bitrate_mode = atoi(aac_bitrate_mode_str);
@@ -107,15 +107,15 @@ static int pa_aac_update_user_config(pa_proplist *user_config, void **codec_data
             pa_log ("aac_fmt parameter must be either s16, s32 or auto (found %s)", aac_fmt_str);
     }
 
-    if (aac_after_buffer_str) {
-        if (streq("on", aac_after_buffer_str)) {
-            i->aac_after_buffer = 1;
+    if (aac_afterburner_str) {
+        if (streq("on", aac_afterburner_str)) {
+            i->aac_afterburner = 1;
             ret++;
-        } else if (streq("off", aac_after_buffer_str)) {
-            i->aac_after_buffer = 0;
+        } else if (streq("off", aac_afterburner_str)) {
+            i->aac_afterburner = 0;
             ret++;
         } else
-            pa_log ("aac_after_buffer parameter must be either on or off (found %s)", aac_after_buffer_str);
+            pa_log ("aac_afterburner parameter must be either on or off (found %s)", aac_afterburner_str);
     }
 
     return ret;
@@ -469,7 +469,7 @@ pa_aac_config_transport(pa_sample_spec default_sample_spec, const void *configur
     if (aac_err != AACENC_OK)
         pa_assert_not_reached();
 
-    aac_err = aacEncoder_SetParam(aac_info->aacenc_handle, AACENC_AFTERBURNER, aac_info->aac_after_buffer);
+    aac_err = aacEncoder_SetParam(aac_info->aacenc_handle, AACENC_AFTERBURNER, aac_info->aac_afterburner);
     if (aac_err != AACENC_OK)
         pa_assert_not_reached();
 

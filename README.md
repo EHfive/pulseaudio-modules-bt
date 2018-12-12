@@ -2,15 +2,15 @@
 
 this repo is a fork of pulseaudio bluetooth modules
 
-and add LDAC, APTX, APTX-HD, AAC support
+and adds LDAC, APTX, APTX-HD, AAC support
 
 #### Added Codecs
 |Codec|Encoding(source role)|Decoding(sink role)|Sample format|Sample frequnecy|
 |:---:|:---:|:---:|:---:|:---:|
-|AAC |✔ |✔ |s16,s32|8..96 khz|
-|APTX | ✔| ✔ |s16|16..48 khz|
-|APTX HD| ✔| ✔ |s24|16..48 khz|
-|LDAC |✔ |✘|s16,s24,s32,f32|44.1..96 khz|
+|AAC |✔ |✔ |s16|8 ... 96 khz|
+|APTX | ✔| ✔ |s16|16 ... 48 khz|
+|APTX HD| ✔| ✔ |s24|16 ... 48 khz|
+|LDAC |✔ |✘|s16,s24,s32,f32|44.1 ... 96 khz|
 
 APTX/APTX_HD sample format fixed to s32 in PA.
 
@@ -48,7 +48,7 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * dbus
 * sbc
 * libfdk-aac
-* [Optional] ffmpeg(libavcodec, libavutil) --- APTX, APTX-HD support
+* [Optional] ffmpeg(libavcodec.so, libavutil.so) --- APTX, APTX-HD support
 * [Optional] ldacBT_enc.so ldacBT_abr.so   --- LDAC encoding support, LDAC ABR support
 
 Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and install libldac to PA modules dir.
@@ -97,6 +97,8 @@ as an alternative, you can fix it with this [udev script](https://gist.github.co
 
 **module-bluez5-discover arg:a2dp_config**
 
+Encoders configurations
+
 |Key| Value|Desc |Default|
 |---|---|---|---|
 |ldac_eqmid|hq|LDAC High Quality|auto|
@@ -110,7 +112,7 @@ as an alternative, you can fix it with this [udev script](https://gist.github.co
 ||auto|Ref default-sample-format|
 |aac_bitrate_mode|\[1, 5\]|Variable Bitrate (VBR)|5|
 ||0|Constant Bitrate (CBR)|
-|aac_after_buffer|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
+|aac_afterburner|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
 |aac_fmt|s16|16-bit signed (little endian)|auto|
 ||s32|32-bit signed|
 ||auto|Ref default-sample-format|

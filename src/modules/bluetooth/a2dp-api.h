@@ -133,7 +133,7 @@ struct pa_a2dp_codec {
 };
 
 
-typedef struct a_a2dp_freq_cap {
+typedef struct pa_a2dp_freq_cap {
     uint32_t rate;
     uint32_t cap;
 } pa_a2dp_freq_cap_t;

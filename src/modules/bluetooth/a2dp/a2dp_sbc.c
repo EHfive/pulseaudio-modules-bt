@@ -11,7 +11,7 @@
 #include <pulse/xmalloc.h>
 #include <pulsecore/once.h>
 
-#include "../a2dp-api.h"
+#include "a2dp-api.h"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
@@ -38,12 +38,12 @@ typedef struct sbc_info {
 } sbc_info_t;
 
 static bool pa_sbc_decoder_load() {
-    /* SBC libs statically linked */
+    /* SBC libs dynamically linked */
     return true;
 }
 
 static bool pa_sbc_encoder_load() {
-    /* SBC libs statically linked */
+    /* SBC libs dynamically linked */
     return true;
 }
 
@@ -82,11 +82,11 @@ pa_sbc_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size_
     pa_assert(sbc_info);
 
     header = read_buf;
-    payload = (struct rtp_payload*) ((uint8_t*) read_buf + sizeof(*header));
+    payload = (struct rtp_payload *) ((uint8_t *) read_buf + sizeof(*header));
 
     *timestamp = ntohl(header->timestamp);
 
-    p = (uint8_t*) read_buf+ sizeof(*header) + sizeof(*payload);
+    p = (uint8_t *) read_buf + sizeof(*header) + sizeof(*payload);
     to_decode = read_buf_size - sizeof(*header) - sizeof(*payload);
 
     d = write_buf;
@@ -119,10 +119,10 @@ pa_sbc_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size_
         pa_assert_fp((size_t) written == sbc_info->codesize);
 
         *_decoded += decoded;
-        p = (const uint8_t*) p + decoded;
+        p = (const uint8_t *) p + decoded;
         to_decode -= decoded;
 
-        d = (uint8_t*) d + written;
+        d = (uint8_t *) d + written;
         to_write -= written;
     }
 
@@ -370,7 +370,7 @@ static void a2dp_reduce_bitpool(void **codec_data) {
     if (sbc_info->sbc.bitpool <= BITPOOL_DEC_LIMIT)
         return;
 
-    bitpool = (uint8_t) (sbc_info->sbc.bitpool - BITPOOL_DEC_STEP);
+    bitpool = (uint8_t)(sbc_info->sbc.bitpool - BITPOOL_DEC_STEP);
 
     if (bitpool < BITPOOL_DEC_LIMIT)
         bitpool = BITPOOL_DEC_LIMIT;
@@ -406,8 +406,8 @@ static size_t pa_sbc_get_capabilities(void **_capabilities) {
     capabilities->allocation_method = SBC_ALLOCATION_SNR | SBC_ALLOCATION_LOUDNESS;
     capabilities->subbands = SBC_SUBBANDS_4 | SBC_SUBBANDS_8;
     capabilities->block_length = SBC_BLOCK_LENGTH_4 | SBC_BLOCK_LENGTH_8 | SBC_BLOCK_LENGTH_12 | SBC_BLOCK_LENGTH_16;
-    capabilities->min_bitpool = MIN_BITPOOL;
-    capabilities->max_bitpool = MAX_BITPOOL;
+    capabilities->min_bitpool = SBC_MIN_BITPOOL;
+    capabilities->max_bitpool = SBC_MAX_BITPOOL;
 
     *_capabilities = capabilities;
 
@@ -539,7 +539,7 @@ pa_sbc_select_configuration(const pa_sample_spec default_sample_spec, const uint
     else if (cap->allocation_method & SBC_ALLOCATION_SNR)
         config->allocation_method = SBC_ALLOCATION_SNR;
 
-    config->min_bitpool = (uint8_t) PA_MAX(MIN_BITPOOL, cap->min_bitpool);
+    config->min_bitpool = (uint8_t) PA_MAX(SBC_MIN_BITPOOL, cap->min_bitpool);
     config->max_bitpool = (uint8_t) PA_MIN(a2dp_default_bitpool(config->frequency, config->channel_mode),
                                            cap->max_bitpool);
 
@@ -637,8 +637,8 @@ static pa_a2dp_sink_t pa_sbc_sink = {
         .decoder_load = pa_sbc_decoder_load,
         .init = pa_sbc_decoder_init,
         .update_user_config = pa_sbc_update_user_config,
-        .config_transport=pa_sbc_config_transport,
-        .get_block_size=pa_sbc_get_read_block_size,
+        .config_transport = pa_sbc_config_transport,
+        .get_block_size = pa_sbc_get_read_block_size,
         .setup_stream = pa_sbc_setup_stream,
         .decode = pa_sbc_decode,
         .free = pa_sbc_free

@@ -7,14 +7,12 @@
 
 #include <pulse/xmalloc.h>
 
-#include "../a2dp-api.h"
+#include "a2dp-api.h"
 
 #include "aptx_libs.c"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
-#define BITPOOL_DEC_LIMIT 32
-#define BITPOOL_DEC_STEP 5
 
 typedef struct aptx_info {
     pa_a2dp_source_read_cb_t read_pcm;
@@ -284,7 +282,7 @@ pa_dual_config_transport(pa_sample_spec default_sample_spec, const void *configu
     AVCodecContext *aptx_ctx;
     pa_assert(aptx_info);
     pa_assert(aptx_info->av_codec);
-    pa_assert_se(configuration_size == (aptx_info->is_hd ? sizeof(a2dp_aptxhd_t) : sizeof(a2dp_aptx_t)));
+    pa_assert_se(configuration_size == (aptx_info->is_hd ? sizeof(a2dp_aptx_hd_t) : sizeof(a2dp_aptx_t)));
 
     if (aptx_info->av_codec_ctx)
         avcodec_free_context_func(&aptx_info->av_codec_ctx);
@@ -383,15 +381,13 @@ static void pa_dual_free(void **codec_data) {
 
 static size_t _internal_pa_dual_get_capabilities(bool is_hd, void **_capabilities) {
 
-    const size_t cap_size = is_hd ? sizeof(a2dp_aptxhd_t) : sizeof(a2dp_aptx_t);
+    const size_t cap_size = is_hd ? sizeof(a2dp_aptx_hd_t) : sizeof(a2dp_aptx_t);
     a2dp_aptx_t *capabilities = (a2dp_aptx_t *) pa_xmalloc0(cap_size);
 
     if (is_hd) {
-        capabilities->info.vendor_id = APTX_HD_VENDOR_ID;
-        capabilities->info.codec_id = APTX_HD_CODEC_ID;
+        capabilities->info = A2DP_SET_VENDOR_ID_CODEC_ID(APTX_HD_VENDOR_ID, APTX_HD_CODEC_ID);
     } else {
-        capabilities->info.vendor_id = APTX_VENDOR_ID;
-        capabilities->info.codec_id = APTX_CODEC_ID;
+        capabilities->info = A2DP_SET_VENDOR_ID_CODEC_ID(APTX_VENDOR_ID, APTX_CODEC_ID);
     }
 
     capabilities->channel_mode = APTX_CHANNEL_MODE_STEREO;
@@ -409,7 +405,7 @@ _internal_pa_dual_select_configuration(bool is_hd, const pa_sample_spec default_
                                        const size_t capabilities_size, void **configuration) {
     a2dp_aptx_t *cap;
     a2dp_aptx_t *config;
-    const size_t cap_size = is_hd ? sizeof(a2dp_aptxhd_t) : sizeof(a2dp_aptx_t);
+    const size_t cap_size = is_hd ? sizeof(a2dp_aptx_hd_t) : sizeof(a2dp_aptx_t);
     pa_a2dp_freq_cap_t aptx_freq_cap, aptx_freq_table[] = {
             {16000U, APTX_SAMPLING_FREQ_16000},
             {32000U, APTX_SAMPLING_FREQ_32000},
@@ -425,11 +421,9 @@ _internal_pa_dual_select_configuration(bool is_hd, const pa_sample_spec default_
     config = (a2dp_aptx_t *) pa_xmalloc0(cap_size);
 
     if (is_hd) {
-        config->info.vendor_id = APTX_HD_VENDOR_ID;
-        config->info.codec_id = APTX_HD_CODEC_ID;
+        config->info = A2DP_SET_VENDOR_ID_CODEC_ID(APTX_HD_VENDOR_ID, APTX_HD_CODEC_ID);
     } else {
-        config->info.vendor_id = APTX_VENDOR_ID;
-        config->info.codec_id = APTX_CODEC_ID;
+        config->info = A2DP_SET_VENDOR_ID_CODEC_ID(APTX_VENDOR_ID, APTX_CODEC_ID);
     }
 
     if (!pa_a2dp_select_cap_frequency(cap->frequency, default_sample_spec, aptx_freq_table,
@@ -460,7 +454,7 @@ static bool _internal_pa_dual_validate_configuration(bool is_hd, const uint8_t *
                                                 const size_t configuration_size) {
     a2dp_aptx_t *c = (a2dp_aptx_t *) selected_configuration;
 
-    if (configuration_size != (is_hd ? sizeof(a2dp_aptxhd_t) : sizeof(a2dp_aptx_t))) {
+    if (configuration_size != (is_hd ? sizeof(a2dp_aptx_hd_t) : sizeof(a2dp_aptx_t))) {
         pa_log_error("APTX configuration array of invalid size");
         return false;
     }
@@ -544,8 +538,8 @@ static pa_a2dp_source_t pa_aptx_source = {
         .init = pa_aptx_encoder_init,
         .update_user_config = pa_dual_update_user_config,
         .encode = pa_dual_encode,
-        .config_transport=pa_dual_config_transport,
-        .get_block_size=pa_dual_get_write_block_size,
+        .config_transport = pa_dual_config_transport,
+        .get_block_size = pa_dual_get_write_block_size,
         .setup_stream = pa_dual_setup_stream,
         .set_tx_length = NULL,
         .decrease_quality = NULL,
@@ -556,20 +550,17 @@ static pa_a2dp_sink_t pa_aptx_sink = {
         .decoder_load = pa_aptx_decoder_load,
         .init = pa_aptx_decoder_init,
         .update_user_config = pa_dual_update_user_config,
-        .config_transport=pa_dual_config_transport,
-        .get_block_size=pa_dual_get_read_block_size,
+        .config_transport = pa_dual_config_transport,
+        .get_block_size = pa_dual_get_read_block_size,
         .setup_stream = pa_dual_setup_stream,
         .decode = pa_dual_decode,
         .free = pa_dual_free
 };
 
 const pa_a2dp_codec_t pa_a2dp_aptx = {
-        .name = "APTX",
+        .name = "aptX",
         .codec = A2DP_CODEC_VENDOR,
-        .vendor_codec = &((a2dp_vendor_codec_t) {
-                .vendor_id = APTX_VENDOR_ID,
-                .codec_id = APTX_CODEC_ID
-        }),
+        .vendor_codec = &A2DP_SET_VENDOR_ID_CODEC_ID(APTX_VENDOR_ID, APTX_CODEC_ID),
         .a2dp_sink = &pa_aptx_sink,
         .a2dp_source = &pa_aptx_source,
         .get_capabilities = pa_aptx_get_capabilities,
@@ -584,8 +575,8 @@ static pa_a2dp_source_t pa_aptx_hd_source = {
         .init = pa_aptx_hd_encoder_init,
         .update_user_config = pa_dual_update_user_config,
         .encode = pa_dual_encode,
-        .config_transport=pa_dual_config_transport,
-        .get_block_size=pa_dual_get_write_block_size,
+        .config_transport = pa_dual_config_transport,
+        .get_block_size = pa_dual_get_write_block_size,
         .setup_stream = pa_dual_setup_stream,
         .set_tx_length = NULL,
         .decrease_quality = NULL,
@@ -596,20 +587,17 @@ static pa_a2dp_sink_t pa_aptx_hd_sink = {
         .decoder_load = pa_aptx_hd_decoder_load,
         .init = pa_aptx_hd_decoder_init,
         .update_user_config = pa_dual_update_user_config,
-        .config_transport=pa_dual_config_transport,
-        .get_block_size=pa_dual_get_read_block_size,
+        .config_transport = pa_dual_config_transport,
+        .get_block_size = pa_dual_get_read_block_size,
         .setup_stream = pa_dual_setup_stream,
         .decode = pa_dual_decode,
         .free = pa_dual_free
 };
 
 const pa_a2dp_codec_t pa_a2dp_aptx_hd = {
-        .name = "APTX_HD",
+        .name = "aptX_HD",
         .codec = A2DP_CODEC_VENDOR,
-        .vendor_codec = &((a2dp_vendor_codec_t) {
-                .vendor_id = APTX_HD_VENDOR_ID,
-                .codec_id = APTX_HD_CODEC_ID
-        }),
+        .vendor_codec = &A2DP_SET_VENDOR_ID_CODEC_ID(APTX_HD_VENDOR_ID, APTX_HD_CODEC_ID),
         .a2dp_sink = &pa_aptx_hd_sink,
         .a2dp_source = &pa_aptx_hd_source,
         .get_capabilities = pa_aptx_hd_get_capabilities,

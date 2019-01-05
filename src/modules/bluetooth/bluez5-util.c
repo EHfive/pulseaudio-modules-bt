@@ -33,7 +33,7 @@
 #include <pulsecore/refcnt.h>
 #include <pulsecore/shared.h>
 
-#include "a2dp-api.h"
+#include "a2dp/a2dp-api.h"
 
 #include "bluez5-util.h"
 

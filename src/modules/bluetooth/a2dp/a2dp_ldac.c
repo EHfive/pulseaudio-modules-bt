@@ -14,7 +14,7 @@
 #include "ldacBT.h"
 #include "ldacBT_abr.h"
 
-#include "../a2dp-api.h"
+#include "a2dp-api.h"
 
 #include "ldac_libs.c"
 
@@ -443,8 +443,7 @@ static void pa_ldac_free(void **codec_data) {
 static size_t pa_ldac_get_capabilities(void **_capabilities) {
     a2dp_ldac_t *capabilities = pa_xmalloc0(sizeof(a2dp_ldac_t));
 
-    capabilities->info.vendor_id = LDAC_VENDOR_ID;
-    capabilities->info.codec_id = LDAC_CODEC_ID;
+    capabilities->info = A2DP_SET_VENDOR_ID_CODEC_ID(LDAC_VENDOR_ID, LDAC_CODEC_ID);
     capabilities->frequency = LDACBT_SAMPLING_FREQ_044100 | LDACBT_SAMPLING_FREQ_048000 |
                               LDACBT_SAMPLING_FREQ_088200 | LDACBT_SAMPLING_FREQ_096000;
     capabilities->channel_mode = LDACBT_CHANNEL_MODE_MONO | LDACBT_CHANNEL_MODE_DUAL_CHANNEL |
@@ -469,8 +468,7 @@ pa_ldac_select_configuration(const pa_sample_spec default_sample_spec, const uin
     if (capabilities_size != sizeof(a2dp_ldac_t))
         return 0;
 
-    config->info.vendor_id = LDAC_VENDOR_ID;
-    config->info.codec_id = LDAC_CODEC_ID;
+    config->info = A2DP_SET_VENDOR_ID_CODEC_ID(LDAC_VENDOR_ID, LDAC_CODEC_ID);
 
     if (!pa_a2dp_select_cap_frequency(cap->frequency, default_sample_spec, ldac_freq_table,
                                       PA_ELEMENTSOF(ldac_freq_table), &ldac_freq_cap))
@@ -554,8 +552,8 @@ static pa_a2dp_source_t pa_ldac_source = {
         .init = pa_ldac_encoder_init,
         .update_user_config = pa_ldac_update_user_config,
         .encode = pa_ldac_encode,
-        .config_transport=pa_ldac_config_transport,
-        .get_block_size=pa_ldac_get_block_size,
+        .config_transport = pa_ldac_config_transport,
+        .get_block_size = pa_ldac_get_block_size,
         .setup_stream = pa_ldac_setup_stream,
         .set_tx_length = pa_ldac_set_tx_length,
         .decrease_quality = NULL,
@@ -565,10 +563,7 @@ static pa_a2dp_source_t pa_ldac_source = {
 const pa_a2dp_codec_t pa_a2dp_ldac = {
         .name = "LDAC",
         .codec = A2DP_CODEC_VENDOR,
-        .vendor_codec = &((a2dp_vendor_codec_t) {
-                .vendor_id = LDAC_VENDOR_ID,
-                .codec_id = LDAC_CODEC_ID
-        }),
+        .vendor_codec = &A2DP_SET_VENDOR_ID_CODEC_ID(LDAC_VENDOR_ID, LDAC_CODEC_ID),
         .a2dp_sink = NULL,
         .a2dp_source = &pa_ldac_source,
         .get_capabilities = pa_ldac_get_capabilities,

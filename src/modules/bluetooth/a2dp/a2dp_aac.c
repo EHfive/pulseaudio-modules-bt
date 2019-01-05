@@ -6,7 +6,7 @@
 
 #include <pulse/xmalloc.h>
 
-#include "../a2dp-api.h"
+#include "a2dp-api.h"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
@@ -18,7 +18,7 @@ typedef struct aac_info {
 
     bool is_a2dp_sink;
 
-    uint16_t seq_num;                    /* Cumulative packet sequence */
+    uint16_t seq_num;
 
     HANDLE_AACDECODER aacdecoder_handle;
     bool aacdecoder_handle_opened;
@@ -31,7 +31,7 @@ typedef struct aac_info {
     size_t mtu;
 
     /* Constant Bitrate: 0
-     * Variable Bitrate: 1-5 (Only effective when both bluetooth devices support vbr) */
+     * Variable Bitrate: 1-5 (Only effects when both bluetooth devices have vbr support ) */
     int aac_enc_bitrate_mode;
     uint32_t aac_afterburner;
     pa_sample_format_t force_pa_fmt;
@@ -44,12 +44,12 @@ typedef struct aac_info {
 } aac_info_t;
 
 static bool pa_aac_decoder_load() {
-    /* AAC libs statically linked */
+    /* AAC libs dynamically linked */
     return true;
 }
 
 static bool pa_aac_encoder_load() {
-    /* AAC libs statically linked */
+    /* AAC libs dynamically linked */
     return true;
 }
 
@@ -75,6 +75,16 @@ pa_aac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
     return true;
 }
 
+/* KEY                 VALUE    DESC                                      DEFAULT
+ * aac_bitrate_mode    [1, 5]   Variable Bitrate (VBR) (encoder)          5
+ *                     0        Constant Bitrate (CBR) (encoder)
+ *
+ * aac_fmt             s16      16-bit signed LE (encoder)                auto
+ *                     s32      32-bit signed LE (encoder)
+ *                     auto
+ *
+ * aac_afterburner     <on/off> FDK-AAC afterburner feature (encoder)     off
+ */
 static int pa_aac_update_user_config(pa_proplist *user_config, void **codec_data) {
     aac_info_t *i = *codec_data;
     const char *aac_bitrate_mode_str, *aac_fmt_str, *aac_afterburner_str;
@@ -219,7 +229,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
             .numAncBytes = 0,
             .numInSamples = aac_info->aacenc_info.frameLength * aac_info->aacenc_info.inputChannels
     };
-    AACENC_OutArgs out_args = {0, 0, 0};
+    AACENC_OutArgs out_args;
 
     pa_assert(aac_info);
 
@@ -519,7 +529,7 @@ static void pa_aac_setup_stream(void **codec_data) {
 
     aac_info->bitrate = PA_MIN(max_bitrate, aac_info->bitrate);
 
-    pa_log_debug("Max AAC transmission bitrate: %d bps; Bitrate in use: %d bps", max_bitrate, aac_info->bitrate);
+    pa_log_debug("Maximum AAC transmission bitrate: %d bps; Bitrate in use: %d bps", max_bitrate, aac_info->bitrate);
 
     /* AAC SINK */
     if (aac_info->is_a2dp_sink) {
@@ -624,11 +634,7 @@ pa_aac_select_configuration(const pa_sample_spec default_sample_spec, const uint
         }
     }
 
-    if (cap->object_type & AAC_OBJECT_TYPE_MPEG4_AAC_SCA)
-        config->object_type = AAC_OBJECT_TYPE_MPEG4_AAC_SCA;
-    else if (cap->object_type & AAC_OBJECT_TYPE_MPEG4_AAC_LTP)
-        config->object_type = AAC_OBJECT_TYPE_MPEG4_AAC_LTP;
-    else if (cap->object_type & AAC_OBJECT_TYPE_MPEG4_AAC_LC)
+    if (cap->object_type & AAC_OBJECT_TYPE_MPEG4_AAC_LC)
         config->object_type = AAC_OBJECT_TYPE_MPEG4_AAC_LC;
     else if (cap->object_type & AAC_OBJECT_TYPE_MPEG2_AAC_LC)
         config->object_type = AAC_OBJECT_TYPE_MPEG2_AAC_LC;
@@ -661,8 +667,6 @@ static bool pa_aac_validate_configuration(const uint8_t *selected_configuration,
     switch (c->object_type) {
         case AAC_OBJECT_TYPE_MPEG2_AAC_LC:
         case AAC_OBJECT_TYPE_MPEG4_AAC_LC:
-        case AAC_OBJECT_TYPE_MPEG4_AAC_LTP:
-        case AAC_OBJECT_TYPE_MPEG4_AAC_SCA:
             break;
         default:
             pa_log_error("Invalid object type in AAC configuration");
@@ -737,4 +741,3 @@ const pa_a2dp_codec_t pa_a2dp_aac = {
         .free_configuration = pa_aac_free_capabilities,
         .validate_configuration = pa_aac_validate_configuration
 };
-

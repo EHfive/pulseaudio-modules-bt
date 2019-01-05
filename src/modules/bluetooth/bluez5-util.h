@@ -22,7 +22,7 @@
 
 #include <pulsecore/core.h>
 
-#include "a2dp-api.h"
+#include "a2dp/a2dp-api.h"
 
 #define PA_BLUETOOTH_UUID_A2DP_SOURCE "0000110a-0000-1000-8000-00805f9b34fb"
 #define PA_BLUETOOTH_UUID_A2DP_SINK   "0000110b-0000-1000-8000-00805f9b34fb"

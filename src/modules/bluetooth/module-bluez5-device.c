@@ -45,7 +45,7 @@
 #include <pulsecore/thread-mq.h>
 #include <pulsecore/time-smoother.h>
 
-#include "a2dp-api.h"
+#include "a2dp/a2dp-api.h"
 #include "bluez5-util.h"
 
 PA_MODULE_AUTHOR("João Paulo Rechi Vita");

@@ -23,7 +23,7 @@ pkg_check_modules(DBUS REQUIRED "dbus-1")
 pkg_check_modules(SBC REQUIRED "sbc")
 pkg_check_modules(AVCODEC REQUIRED libavcodec>=58.18.100)
 pkg_check_modules(AVUTIL REQUIRED libavutil>=56.14.100)
-pkg_check_modules(FDKAAC REQUIRED "fdk-aac")
+pkg_check_modules(FDKAAC REQUIRED "fdk-aac>=0.1.5")
 
 pkg_check_modules(LDACENC "ldacBT-enc")
 pkg_check_modules(LDACABR "ldacBT-abr")

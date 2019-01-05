@@ -36,7 +36,7 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * libdbus
 * ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
 * libsbc
-* libfdk-aac
+* libfdk-aac>=0.1.5
 * libtool
 * cmake
 * pkg-config

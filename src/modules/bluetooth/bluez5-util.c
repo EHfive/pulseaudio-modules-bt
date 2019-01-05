@@ -1387,7 +1387,7 @@ static DBusMessage *endpoint_set_configuration(DBusConnection *conn, DBusMessage
 
             dbus_message_iter_get_fixed_array(&array, &config, &size);
 
-            if(!a2dp_codec->set_configuration(config, (const size_t) size))
+            if(!a2dp_codec->validate_configuration(config, (const size_t) size))
                 goto fail;
         }
 

@@ -557,7 +557,7 @@ static void pa_sbc_free_capabilities(void **capabilities) {
     *capabilities = NULL;
 }
 
-static bool pa_sbc_set_configuration(const uint8_t *selected_configuration, const size_t configuration_size) {
+static bool pa_sbc_validate_configuration(const uint8_t *selected_configuration, const size_t configuration_size) {
     a2dp_sbc_t *c = (a2dp_sbc_t *) selected_configuration;
 
     if (configuration_size != sizeof(a2dp_sbc_t)) {
@@ -654,5 +654,5 @@ const pa_a2dp_codec_t pa_a2dp_sbc = {
         .select_configuration = pa_sbc_select_configuration,
         .free_capabilities = pa_sbc_free_capabilities,
         .free_configuration = pa_sbc_free_capabilities,
-        .set_configuration = pa_sbc_set_configuration
+        .validate_configuration = pa_sbc_validate_configuration
 };

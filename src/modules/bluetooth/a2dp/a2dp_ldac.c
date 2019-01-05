@@ -514,7 +514,7 @@ static void pa_ldac_free_capabilities(void **capabilities) {
     *capabilities = NULL;
 }
 
-static bool pa_ldac_set_configuration(const uint8_t *selected_configuration, const size_t configuration_size) {
+static bool pa_ldac_validate_configuration(const uint8_t *selected_configuration, const size_t configuration_size) {
     a2dp_ldac_t *c = (a2dp_ldac_t *) selected_configuration;
 
     if (configuration_size != sizeof(a2dp_ldac_t)) {
@@ -575,5 +575,5 @@ const pa_a2dp_codec_t pa_a2dp_ldac = {
         .select_configuration = pa_ldac_select_configuration,
         .free_capabilities = pa_ldac_free_capabilities,
         .free_configuration = pa_ldac_free_capabilities,
-        .set_configuration = pa_ldac_set_configuration
+        .validate_configuration = pa_ldac_validate_configuration
 };

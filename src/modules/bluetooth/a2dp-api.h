@@ -128,7 +128,7 @@ struct pa_a2dp_codec {
     void (*free_configuration)(void **configuration);
 
     /* Return if configuration valid */
-    bool (*set_configuration)(const uint8_t *selected_configuration, const size_t configuration_size);
+    bool (*validate_configuration)(const uint8_t *selected_configuration, const size_t configuration_size);
 
 };
 

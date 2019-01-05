@@ -456,7 +456,7 @@ static void pa_dual_free_capabilities(void **capabilities) {
     *capabilities = NULL;
 }
 
-static bool _internal_pa_dual_set_configuration(bool is_hd, const uint8_t *selected_configuration,
+static bool _internal_pa_dual_validate_configuration(bool is_hd, const uint8_t *selected_configuration,
                                                 const size_t configuration_size) {
     a2dp_aptx_t *c = (a2dp_aptx_t *) selected_configuration;
 
@@ -518,9 +518,9 @@ static size_t pa_aptx_select_configuration(const pa_sample_spec default_sample_s
                                                   configuration);
 }
 
-static bool pa_aptx_set_configuration(const uint8_t *selected_configuration,
+static bool pa_aptx_validate_configuration(const uint8_t *selected_configuration,
                                       const size_t configuration_size) {
-    return _internal_pa_dual_set_configuration(false, selected_configuration, configuration_size);
+    return _internal_pa_dual_validate_configuration(false, selected_configuration, configuration_size);
 }
 
 static size_t pa_aptx_hd_get_capabilities(void **_capabilities) {
@@ -534,9 +534,9 @@ static size_t pa_aptx_hd_select_configuration(const pa_sample_spec default_sampl
                                                   configuration);
 }
 
-static bool pa_aptx_hd_set_configuration(const uint8_t *selected_configuration,
+static bool pa_aptx_hd_validate_configuration(const uint8_t *selected_configuration,
                                          const size_t configuration_size) {
-    return _internal_pa_dual_set_configuration(true, selected_configuration, configuration_size);
+    return _internal_pa_dual_validate_configuration(true, selected_configuration, configuration_size);
 }
 
 static pa_a2dp_source_t pa_aptx_source = {
@@ -576,7 +576,7 @@ const pa_a2dp_codec_t pa_a2dp_aptx = {
         .select_configuration = pa_aptx_select_configuration,
         .free_capabilities = pa_dual_free_capabilities,
         .free_configuration = pa_dual_free_capabilities,
-        .set_configuration = pa_aptx_set_configuration
+        .validate_configuration = pa_aptx_validate_configuration
 };
 
 static pa_a2dp_source_t pa_aptx_hd_source = {
@@ -616,5 +616,5 @@ const pa_a2dp_codec_t pa_a2dp_aptx_hd = {
         .select_configuration = pa_aptx_hd_select_configuration,
         .free_capabilities = pa_dual_free_capabilities,
         .free_configuration = pa_dual_free_capabilities,
-        .set_configuration = pa_aptx_hd_set_configuration
+        .validate_configuration = pa_aptx_hd_validate_configuration
 };

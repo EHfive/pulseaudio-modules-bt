@@ -9,10 +9,6 @@
 
 #include <pulse/sample.h>
 #include <pulse/proplist.h>
-#include <pulse/xmalloc.h>
-#include <pulsecore/log.h>
-#include <pulsecore/macro.h>
-#include <pulsecore/once.h>
 #include <pulsecore/hashmap.h>
 
 #include "a2dp-codecs.h"

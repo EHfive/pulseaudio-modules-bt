@@ -2,6 +2,15 @@
 #include <arpa/inet.h>
 #include <string.h>
 
+#ifdef HAVE_CONFIG_H
+
+#include <config.h>
+
+#endif
+
+#include <pulse/xmalloc.h>
+#include <pulsecore/once.h>
+
 #include "../a2dp-api.h"
 
 #define streq(a, b) (!strcmp((a),(b)))

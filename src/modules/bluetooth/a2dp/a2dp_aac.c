@@ -4,6 +4,8 @@
 #include <fdk-aac/aacenc_lib.h>
 #include <fdk-aac/aacdecoder_lib.h>
 
+#include <pulse/xmalloc.h>
+
 #include "../a2dp-api.h"
 
 #define streq(a, b) (!strcmp((a),(b)))

@@ -5,6 +5,8 @@
 #include <libavcodec/avcodec.h>
 #include <libavutil/samplefmt.h>
 
+#include <pulse/xmalloc.h>
+
 #include "../a2dp-api.h"
 
 #include "aptx_libs.c"

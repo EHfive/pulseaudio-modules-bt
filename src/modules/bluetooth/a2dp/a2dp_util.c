@@ -1,5 +1,6 @@
 
 #include <string.h>
+#include <pulse/xmalloc.h>
 
 #include "../a2dp-api.h"
 

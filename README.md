@@ -5,33 +5,36 @@ this repo is a fork of pulseaudio bluetooth modules
 and adds LDAC, APTX, APTX-HD, AAC support
 
 #### Added Codecs
-|Codec|Encoding(source role)|Decoding(sink role)|Sample format|Sample frequnecy|
+|Codec|Encoding(source role)|Decoding(sink role)|Sample format(s)|Sample frequnecies|
 |:---:|:---:|:---:|:---:|:---:|
-|AAC |✔ |✔ |s16|8 ... 96 khz|
-|APTX | ✔| ✔ |s16|16 ... 48 khz|
-|APTX HD| ✔| ✔ |s24|16 ... 48 khz|
-|LDAC |✔ |✘|s16,s24,s32,f32|44.1 ... 96 khz|
+|AAC |✔ |✔ |s16|8, 11.025, 12,16, 22.05, 24, 32, 44.1, 48, 64, 88.2, 96 khz|
+|APTX | ✔| ✔ |s16|16, 32, 44.1, 48 khz|
+|APTX HD| ✔| ✔ |s24||
+|LDAC |✔ |✘|s16,s24,s32,f32|44.1, 48, 88.2, 96 khz|
 
 APTX/APTX_HD sample format fixed to s32 in PA.
+(ffmpeg do the sample format transformation)
 
 ## Usage
 ### Packages
 
 [wiki/Packages](https://github.com/EHfive/pulseaudio-modules-bt/wiki/Packages)
 
-also check #3
+also check issue#3
+
+**Configure modules**
+
+See bottom.
 
 ### General Installation
 
 For packager, developer, other PA version user:
 
-I also create patch files, you can find them in releases. Apply patches and recompile/repackage pulseaudio.
-
-And you may use my CmakeList.txt (may also needs modifications) as well, just copy out patched files to src dir and keep file structure.
+I also create patch files, you can find them in releases. Just apply patches, then recompile/repackage pulseaudio.
 
 **Make Dependencies**
 
-* pulseaudio,libpulse~=12.0
+* pulseaudio,libpulse>=11.59.1
 * bluez-libs/libbluetooth~=5.0
 * libdbus
 * ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
@@ -49,9 +52,12 @@ And you may use my CmakeList.txt (may also needs modifications) as well, just co
 * sbc
 * libfdk-aac
 * [Optional] ffmpeg(libavcodec.so, libavutil.so) --- APTX, APTX-HD support
-* [Optional] ldacBT_enc.so ldacBT_abr.so   --- LDAC encoding support, LDAC ABR support
+* [Optional] ldacBT/libldac (libldacBT_enc.so, libldacBT_abr.so)   --- LDAC encoding support, LDAC ABR support
 
-Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and install libldac to PA modules dir.
+Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and installing libldac to PA modules dir.
+See cmake option `FORCE_BUILD_LDAC` or `FORCE_NOT_BUILD_LDAC` .
+
+#### Build
 
 **backup original pulseaudio bt modules**
 
@@ -61,13 +67,17 @@ MODDIR=`pkg-config --variable=modlibexecdir libpulse`
 sudo find $MODDIR -regex ".*\(bluez5\|bluetooth\).*\.so" -exec cp {} {}.bak \;
 ```
 
-**install**
-
+**pull sources**
 ```bash
 git clone https://github.com/EHfive/pulseaudio-modules-bt.git
 cd pulseaudio-modules-bt
 git submodule update --init
+```
 
+**install**
+
+A. build for PulseAudio releases (e.g., v12.0, v12.2, etc.)
+```bash
 git -C pa/ checkout v`pkg-config libpulse --modversion|sed 's/[^0-9.]*\([0-9.]*\).*/\1/'`
 
 mkdir build && cd build
@@ -76,6 +86,13 @@ make
 sudo make install
 ```
 
+B. or build for PulseAudio git master
+```bash
+mkdir build && cd build
+cmake -DFORCE_LARGEST_PA_VERSION=ON ..
+make
+sudo make install
+```
 #### Load Modules
 
 ```bash
@@ -117,7 +134,7 @@ Encoders configurations
 ||s32|32-bit signed|
 ||auto|Ref default-sample-format|
 
-#### config
+#### Configure
 
 edit `/etc/pulse/default.pa`
 

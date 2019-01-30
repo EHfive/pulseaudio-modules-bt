@@ -217,7 +217,7 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
     /* write it to the fifo */
     memset(write_buf, 0, sizeof(*header) + sizeof(*payload));
     header->v = 2;
-    header->pt = 1;
+    header->pt = 96;
     header->sequence_number = htons(ldac_info->seq_num++);
     header->timestamp = htonl(timestamp);
     header->ssrc = htonl(1);

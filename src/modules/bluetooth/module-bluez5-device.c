@@ -31,6 +31,10 @@
 #include <pulse/timeval.h>
 #include <pulse/utf8.h>
 
+#ifdef PulseAudio_VERSION_12_N
+#include <pulse/util.h>
+#endif
+
 #include <pulsecore/core-error.h>
 #include <pulsecore/core-rtclock.h>
 #include <pulsecore/core-util.h>
@@ -1306,8 +1310,11 @@ static void thread_func(void *userdata) {
     pa_log_debug("IO Thread starting up");
 
     if (u->core->realtime_scheduling)
+#ifdef PulseAudio_VERSION_11_N
         pa_make_realtime(u->core->realtime_priority);
-
+#elif  PulseAudio_VERSION_12_N
+        pa_thread_make_realtime(u->core->realtime_priority);
+#endif
     pa_thread_mq_install(&u->thread_mq);
 
     /* Setup the stream only if the transport was already acquired */

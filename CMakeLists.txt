@@ -9,6 +9,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/sr
 
 option(FORCE_BUILD_LDAC "Build & Install ldac libraries anyway" OFF)
 option(FORCE_NOT_BUILD_LDAC "Don't build ldac libraries anyway" OFF)
+option(FORCE_LARGEST_PA_VERSION "Build for largest available version( <= PulseAudio git master) of PulseAudio" OFF)
 
 if(("${FORCE_BUILD_LDAC}" STREQUAL "ON") AND ("${FORCE_NOT_BUILD_LDAC}" STREQUAL "ON"))
     message(FATAL_ERROR "FORCE_BUILD_LDAC and FORCE_NOT_BUILD_LDAC enabled sametime")
@@ -59,6 +60,20 @@ if("" STREQUAL "${PulseAudio_lib_version}")
     message(SEND_ERROR "Can't match libpulse version")
     set(PulseAudio_lib_version ${PulseAudio_VERSION})
     message(WARNING "SET PulseAudio_lib_version = ${PulseAudio_VERSION}")
+endif()
+
+# Definitions
+#   PulseAudio_VERSION_12_N
+#       PulseAudio version greater than 12.2
+#
+#   PulseAudio_VERSION_11_N
+#       PulseAudio version greater than 11.1
+#
+if((${PulseAudio_lib_version} VERSION_GREATER "12.2")
+        OR (${FORCE_LARGEST_PA_VERSION} STREQUAL "ON"))
+    add_definitions(-DPulseAudio_VERSION_12_N)
+elseif(${PulseAudio_lib_version} VERSION_GREATER "11.1")
+    add_definitions(-DPulseAudio_VERSION_11_N)
 endif()
 
 

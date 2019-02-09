@@ -28,10 +28,6 @@ See bottom.
 
 ### General Installation
 
-For packager, developer, other PA version user:
-
-I also create patch files, you can find them in releases. Just apply patches, then recompile/repackage pulseaudio.
-
 **Make Dependencies**
 
 * pulseaudio,libpulse>=11.59.1
@@ -52,7 +48,7 @@ I also create patch files, you can find them in releases. Just apply patches, th
 * sbc
 * libfdk-aac
 * [Optional] ffmpeg(libavcodec.so, libavutil.so) --- APTX, APTX-HD support
-* [Optional] ldacBT/libldac (libldacBT_enc.so, libldacBT_abr.so)   --- LDAC encoding support, LDAC ABR support
+* [Optional] [ldacBT](https://github.com/EHfive/ldacBT)/libldac (libldacBT_enc.so, libldacBT_abr.so)   --- LDAC encoding support, LDAC ABR support
 
 Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and installing libldac to PA modules dir.
 See cmake option `FORCE_BUILD_LDAC` or `FORCE_NOT_BUILD_LDAC` .
@@ -102,13 +98,17 @@ pulseaudio -k
 pulseaudio --start
 ```
 
-then connect your bluetooth device and switch audio profile to 'A2DP Sink'
+### Connect device
 
-if there is only profile 'HSP/HFP' and 'off', disconnect and reconnect your device
+Then connect your bluetooth device and switch audio profile to 'A2DP Sink';
 
-> [" When the device connects automatically (by powering on after being paired) A2DP is 'unavailable' "   -----Issue: cannot select a2dp profile](https://gitlab.freedesktop.org/pulseaudio/pulseaudio/issues/525)
+If there is only profile 'HSP/HFP' and 'off', disconnect and reconnect your device.
 
-as an alternative, you can fix it with this [udev script](https://gist.github.com/EHfive/c4f1218a75f95b076f0387403246de78)
+The issue has been fixed in latest bluez git master, see https://github.com/EHfive/pulseaudio-modules-bt/issues/14#issuecomment-462039332.
+
+As an alternative, you can fix it with this [udev script](https://gist.github.com/EHfive/c4f1218a75f95b076f0387403246de78).
+
+Run `pactl list | grep a2dp_codec` to see which codec device are using.
 
 #### Module Aruguments
 
@@ -167,3 +167,4 @@ see [Wiki](https://github.com/EHfive/pulseaudio-modules-bt/wiki)
 
 ~~add AAC support using Fraunhofer FDK AAC codec library~~
 
+add codec switching support using latest blueZ's experimental feature

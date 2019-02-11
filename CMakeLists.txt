@@ -143,7 +143,7 @@ SET_TARGET_PROPERTIES(module-bluez5-device PROPERTIES PREFIX "")
 
 # module-bluetooth-discover
 add_library(module-bluetooth-discover MODULE
-        ${PROJECT_SOURCE_DIR}/pa/src/modules/bluetooth/module-bluetooth-discover.c
+        ${MOD_BT_DIR}/module-bluetooth-discover.c
         )
 
 target_compile_definitions(module-bluetooth-discover PUBLIC PA_MODULE_NAME=module_bluetooth_discover)
@@ -152,7 +152,7 @@ SET_TARGET_PROPERTIES(module-bluetooth-discover PROPERTIES PREFIX "")
 
 # module-bluetooth-policy
 add_library(module-bluetooth-policy MODULE
-        ${PROJECT_SOURCE_DIR}/pa/src/modules/bluetooth/module-bluetooth-policy.c
+        ${MOD_BT_DIR}/module-bluetooth-policy.c
         )
 
 target_compile_definitions(module-bluetooth-policy PUBLIC PA_MODULE_NAME=module_bluetooth_policy)

@@ -1447,8 +1447,8 @@ static void thread_func(void *userdata) {
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-//                            skip_bytes = bytes_to_send - 2 * u->write_block_size;
-                            skip_bytes = pa_frame_align(bytes_to_send, &u->sample_spec);
+                            skip_bytes = pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % bytes_to_send),
+                                                        &u->sample_spec);
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",

@@ -31,6 +31,8 @@
 #include <pulsecore/source.h>
 #include <pulsecore/core-util.h>
 
+#define pa_bt_prefix_eq(a,b) (pa_strneq((a),(b),(PA_MIN((strlen((a))),(strlen((b)))))))
+
 PA_MODULE_AUTHOR("Frédéric Dalleau, Pali Rohár");
 PA_MODULE_DESCRIPTION("Policy module to make using bluetooth devices out-of-the-box easier");
 PA_MODULE_VERSION(PACKAGE_VERSION);
@@ -85,7 +87,7 @@ static pa_hook_result_t source_put_hook_callback(pa_core *c, pa_source *source, 
     if (!s)
         return PA_HOOK_OK;
 
-    if (u->enable_a2dp_source && pa_streq(s, "a2dp_source"))
+    if (u->enable_a2dp_source && pa_bt_prefix_eq(s, "a2dp_source"))
         role = "music";
     else if (u->enable_ag && pa_streq(s, "headset_audio_gateway"))
         role = "phone";
@@ -154,7 +156,7 @@ static void card_set_profile(struct userdata *u, pa_card *card, bool revert_to_a
 
         /* Check for correct profile based on revert_to_a2dp */
         if (revert_to_a2dp) {
-            if (!pa_streq(profile->name, "a2dp") && !pa_streq(profile->name, "a2dp_sink"))
+            if (!pa_streq(profile->name, "a2dp") && !pa_bt_prefix_eq(profile->name, "a2dp_sink"))
                 continue;
         } else {
             if (!pa_streq(profile->name, "hsp") && !pa_streq(profile->name, "headset_head_unit"))
@@ -196,11 +198,11 @@ static void switch_profile(pa_card *card, bool revert_to_a2dp, void *userdata) {
             return;
 
         /* Skip card if already has active a2dp profile */
-        if (pa_streq(card->active_profile->name, "a2dp") || pa_streq(card->active_profile->name, "a2dp_sink"))
+        if (pa_streq(card->active_profile->name, "a2dp") || pa_strneq(card->active_profile->name, "a2dp_sink", strlen("a2dp_sink")))
             return;
     } else {
         /* Skip card if does not have active a2dp profile */
-        if (!pa_streq(card->active_profile->name, "a2dp") && !pa_streq(card->active_profile->name, "a2dp_sink"))
+        if (!pa_streq(card->active_profile->name, "a2dp") && !pa_bt_prefix_eq(card->active_profile->name, "a2dp_sink"))
             return;
 
         /* Skip card if already has active hsp profile */
@@ -308,7 +310,7 @@ static pa_hook_result_t card_init_profile_hook_callback(pa_core *c, pa_card *car
     /* Ignore card if has already set other initial profile than a2dp */
     if (card->active_profile &&
         !pa_streq(card->active_profile->name, "a2dp") &&
-        !pa_streq(card->active_profile->name, "a2dp_sink"))
+        !pa_bt_prefix_eq(card->active_profile->name, "a2dp_sink"))
         return PA_HOOK_OK;
 
     /* Set initial profile to hsp */
@@ -360,7 +362,7 @@ static pa_hook_result_t profile_available_hook_callback(pa_core *c, pa_card_prof
         return PA_HOOK_OK;
 
     /* Do not automatically switch profiles for headsets, just in case */
-    if (pa_streq(profile->name, "a2dp_sink") || pa_streq(profile->name, "headset_head_unit"))
+    if (pa_bt_prefix_eq(profile->name, "a2dp_sink") || pa_streq(profile->name, "headset_head_unit"))
         return PA_HOOK_OK;
 
     is_active_profile = card->active_profile == profile;

@@ -199,7 +199,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
     size_t nbytes;
     uint8_t *d;
     const uint8_t *p;
-    int to_write;
+    int to_write, to_read;
     unsigned frame_count;
     aac_info_t *aac_info = *codec_data;
     const size_t sample_size = pa_sample_size(&aac_info->sample_spec),
@@ -240,6 +240,7 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
     aac_info->read_pcm((const void **) &p, (size_t) in_bufSizes[0], read_cb_data);
 
     in_bufDesc.bufs[0] = (void *) p;
+    to_read = in_bufSizes[0];
 
     d = (uint8_t *) write_buf + sizeof(*header);
     to_write = (int) (write_buf_size - sizeof(*header));
@@ -249,21 +250,22 @@ pa_aac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t
 
     *_encoded = 0;
 
-    while (PA_UNLIKELY(in_args.numInSamples && to_write > 0)) {
+    while (PA_UNLIKELY(to_read > 0 && to_write > 0)) {
         size_t encoded;
 
         AACENC_ERROR aac_err = aacEncEncode(aac_info->aacenc_handle, &in_bufDesc, &out_bufDesc, &in_args, &out_args);
 
         if (PA_UNLIKELY(aac_err != AACENC_OK)) {
-            pa_log_error("AAC encoding error, 0x%x", aac_err);
+            pa_log_error("AAC encoding error, 0x%x; frame_count:%d, in_bufSizes:%d, out_bufSizes %d, to_read:%d, "
+                         "to_write:%d, encoded:%lu",
+                         aac_err, frame_count, in_bufSizes[0], out_bufSizes[0], to_read, to_write, *_encoded);
             aac_info->read_buf_free((const void **) &p, read_cb_data);
             *_encoded = 0;
             return 0;
         }
 
         encoded = out_args.numInSamples * sample_size;
-
-        in_args.numInSamples -= out_args.numInSamples;
+        to_read -= encoded;
         p += encoded;
         *_encoded += encoded;
 

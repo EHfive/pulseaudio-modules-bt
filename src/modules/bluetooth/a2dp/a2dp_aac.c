@@ -435,7 +435,7 @@ pa_aac_config_transport(pa_sample_spec default_sample_spec, const void *configur
     /* AAC SOURCE */
 
     if (!aac_info->aacenc_handle_opened) {
-        aac_err = aacEncOpen(&aac_info->aacenc_handle, 0, 2);
+        aac_err = aacEncOpen(&aac_info->aacenc_handle, 0x07, 2);
 
         if (aac_err != AACENC_OK) {
             pa_log_error("Cannot open AAC encoder handle: AAC error 0x%x", aac_err);

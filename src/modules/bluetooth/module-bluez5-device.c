@@ -95,6 +95,11 @@ typedef struct bluetooth_msg {
 PA_DEFINE_PRIVATE_CLASS(bluetooth_msg, pa_msgobject);
 #define BLUETOOTH_MSG(o) (bluetooth_msg_cast(o))
 
+typedef struct pa_bluetooth_profile_info {
+    pa_bluetooth_profile_t profile;
+    pa_bluetooth_stream_endpoint *sep;
+} __attribute__ ((packed)) pa_bluetooth_profile_info_t;
+
 typedef struct pa_a2dp_info {
     pa_proplist *a2dp_config;
     void *a2dp_sink_data;
@@ -122,6 +127,7 @@ struct userdata {
     pa_sink *sink;
     pa_source *source;
     pa_bluetooth_profile_t profile;
+    pa_bluetooth_stream_endpoint *sep;
     char *output_port_name;
     char *input_port_name;
 
@@ -1213,6 +1219,8 @@ static void transport_config(struct userdata *u) {
     }
 }
 
+static void set_configuration_cb(bool success, void *data);
+
 /* Run from main thread */
 static int setup_transport(struct userdata *u) {
     pa_bluetooth_transport *t;
@@ -1226,6 +1234,12 @@ static int setup_transport(struct userdata *u) {
     if (!t || t->state <= PA_BLUETOOTH_TRANSPORT_STATE_DISCONNECTED) {
         pa_log_warn("Profile %s has no transport", pa_bluetooth_profile_to_string(u->profile));
         return -1;
+    }
+
+    if (u->sep && u->sep->a2dp_codec && t->a2dp_codec && u->sep->a2dp_codec != t->a2dp_codec) {
+        u->device->sep_setting_configuration = true;
+        pa_bluetooth_sep_set_configuration(u->sep, u->core->default_sample_spec, set_configuration_cb, u);
+        return -EINPROGRESS;
     }
 
     u->transport = t;
@@ -1264,7 +1278,11 @@ static int init_profile(struct userdata *u) {
     pa_assert(u);
     pa_assert(u->profile != PA_BLUETOOTH_PROFILE_OFF);
 
-    if (setup_transport(u) < 0)
+    /* Credit: Pali Rohár <pali.rohar@gmail.com>  */
+    r = setup_transport(u);
+    if (r == -EINPROGRESS)
+        return 0;
+    else if (r < 0)
         return -1;
 
     pa_assert(u->transport);
@@ -1826,7 +1844,7 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
     pa_device_port *input_port, *output_port;
     const char *name, *desc;
     pa_card_profile *cp = NULL;
-    pa_bluetooth_profile_t *p;
+    pa_bluetooth_profile_info_t *p_info;
     pa_bluetooth_transport *t;
     const pa_a2dp_codec_t *a2dp_codec;
 
@@ -1847,7 +1865,7 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         pa_assert_se(pa_a2dp_codec_index_is_source(codec_index));
         pa_assert_se(a2dp_codec != NULL && a2dp_codec->a2dp_source);
 
-        cp = pa_card_profile_new(name, _(a2dp_codec_index_to_description(codec_index)), sizeof(pa_bluetooth_profile_t));
+        cp = pa_card_profile_new(name, _(a2dp_codec_index_to_description(codec_index)), sizeof(pa_bluetooth_profile_info_t));
         cp->priority = 40;
         cp->n_sinks = 1;
         cp->n_sources = 0;
@@ -1855,14 +1873,14 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         cp->max_source_channels = 0;
         pa_hashmap_put(output_port->profiles, cp->name, cp);
 
-        p = PA_CARD_PROFILE_DATA(cp);
+        p_info = PA_CARD_PROFILE_DATA(cp);
         break;
 
     case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
         pa_assert_se(pa_a2dp_codec_index_is_sink(codec_index));
         pa_assert_se(a2dp_codec != NULL && a2dp_codec->a2dp_sink);
 
-        cp = pa_card_profile_new(name, _(a2dp_codec_index_to_description(codec_index)), sizeof(pa_bluetooth_profile_t));
+        cp = pa_card_profile_new(name, _(a2dp_codec_index_to_description(codec_index)), sizeof(pa_bluetooth_profile_info_t));
         cp->priority = 20;
         cp->n_sinks = 0;
         cp->n_sources = 1;
@@ -1870,11 +1888,11 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         cp->max_source_channels = 2;
         pa_hashmap_put(input_port->profiles, cp->name, cp);
 
-        p = PA_CARD_PROFILE_DATA(cp);
+        p_info = PA_CARD_PROFILE_DATA(cp);
         break;
 
     case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
-        cp = pa_card_profile_new(name, _("Headset Head Unit (HSP/HFP)"), sizeof(pa_bluetooth_profile_t));
+        cp = pa_card_profile_new(name, _("Headset Head Unit (HSP/HFP)"), sizeof(pa_bluetooth_profile_info_t));
         cp->priority = 30;
         cp->n_sinks = 1;
         cp->n_sources = 1;
@@ -1883,11 +1901,11 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         pa_hashmap_put(input_port->profiles, cp->name, cp);
         pa_hashmap_put(output_port->profiles, cp->name, cp);
 
-        p = PA_CARD_PROFILE_DATA(cp);
+        p_info = PA_CARD_PROFILE_DATA(cp);
         break;
 
     case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
-        cp = pa_card_profile_new(name, _("Headset Audio Gateway (HSP/HFP)"), sizeof(pa_bluetooth_profile_t));
+        cp = pa_card_profile_new(name, _("Headset Audio Gateway (HSP/HFP)"), sizeof(pa_bluetooth_profile_info_t));
         cp->priority = 10;
         cp->n_sinks = 1;
         cp->n_sources = 1;
@@ -1896,18 +1914,18 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         pa_hashmap_put(input_port->profiles, cp->name, cp);
         pa_hashmap_put(output_port->profiles, cp->name, cp);
 
-        p = PA_CARD_PROFILE_DATA(cp);
+        p_info = PA_CARD_PROFILE_DATA(cp);
         break;
 
     case PA_BLUETOOTH_PROFILE_OFF:
         pa_assert_not_reached();
     }
 
-    *p = profile;
-
-    if ((t = u->device->transports[*p])){
+    p_info->profile = profile;
+    p_info->sep = pa_bluetooth_device_get_sep_by_codec_index(u->device, codec_index);
+    if ((t = u->device->transports[profile])){
         if(t->a2dp_codec == a2dp_codec)
-            cp->available = transport_state_to_availability(u->device->transports[*p]->state);
+            cp->available = transport_state_to_availability(u->device->transports[profile]->state);
         else
             cp->available = PA_AVAILABLE_NO;
     } else
@@ -1916,21 +1934,50 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
     return cp;
 }
 
+static void set_configuration_cb(bool success, void *data) {
+    pa_assert(data);
+
+    struct userdata *u = (struct userdata *) data;
+
+    u->device->sep_setting_configuration = false;
+
+    if(!success)
+        goto off;
+
+    if (u->profile != PA_BLUETOOTH_PROFILE_OFF)
+        if (init_profile(u) < 0)
+            goto off;
+
+    if (u->sink || u->source)
+        if (start_thread(u) < 0)
+            goto off;
+
+    pa_log_debug("A2DP profile changed to %s", pa_bluetooth_a2dp_profile_to_string(u->sep->codec_index));
+
+    return;
+
+off:
+    stop_thread(u);
+
+    pa_assert_se(pa_card_set_profile(u->card, pa_hashmap_get(u->card->profiles, "off"), false) >= 0);
+
+}
+
 /* Run from main thread */
 static int set_profile_cb(pa_card *c, pa_card_profile *new_profile) {
     struct userdata *u;
-    pa_bluetooth_profile_t *p;
+    pa_bluetooth_profile_info_t *p_info;
 
     pa_assert(c);
     pa_assert(new_profile);
     pa_assert_se(u = c->userdata);
 
-    p = PA_CARD_PROFILE_DATA(new_profile);
+    p_info = PA_CARD_PROFILE_DATA(new_profile);
 
-    if (*p != PA_BLUETOOTH_PROFILE_OFF) {
+    if (p_info->profile != PA_BLUETOOTH_PROFILE_OFF) {
         const pa_bluetooth_device *d = u->device;
 
-        if (!d->transports[*p] || d->transports[*p]->state <= PA_BLUETOOTH_TRANSPORT_STATE_DISCONNECTED) {
+        if (!d->transports[p_info->profile] || d->transports[p_info->profile]->state <= PA_BLUETOOTH_TRANSPORT_STATE_DISCONNECTED) {
             pa_log_warn("Refused to switch profile to %s: Not connected", new_profile->name);
             return -PA_ERR_IO;
         }
@@ -1938,7 +1985,8 @@ static int set_profile_cb(pa_card *c, pa_card_profile *new_profile) {
 
     stop_thread(u);
 
-    u->profile = *p;
+    u->profile = p_info->profile;
+    u->sep = p_info->sep;
 
     if (u->profile != PA_BLUETOOTH_PROFILE_OFF)
         if (init_profile(u) < 0)
@@ -1980,7 +2028,7 @@ static int add_card(struct userdata *u) {
     char *alias;
     pa_bluetooth_form_factor_t ff;
     pa_card_profile *cp;
-    pa_bluetooth_profile_t *p;
+    pa_bluetooth_profile_info_t *p_info;
     const char *uuid;
     void *state;
 
@@ -2065,10 +2113,11 @@ static int add_card(struct userdata *u) {
 
     pa_assert(!pa_hashmap_isempty(data.profiles));
 
-    cp = pa_card_profile_new("off", _("Off"), sizeof(pa_bluetooth_profile_t));
+    cp = pa_card_profile_new("off", _("Off"), sizeof(pa_bluetooth_profile_info_t));
     cp->available = PA_AVAILABLE_YES;
-    p = PA_CARD_PROFILE_DATA(cp);
-    *p = PA_BLUETOOTH_PROFILE_OFF;
+    p_info = PA_CARD_PROFILE_DATA(cp);
+    p_info->profile = PA_BLUETOOTH_PROFILE_OFF;
+    p_info->sep = NULL;
     pa_hashmap_put(data.profiles, cp->name, cp);
 
     u->card = pa_card_new(u->core, &data);
@@ -2081,10 +2130,18 @@ static int add_card(struct userdata *u) {
     u->card->userdata = u;
     u->card->set_profile = set_profile_cb;
     pa_card_choose_initial_profile(u->card);
+
+    PA_HASHMAP_FOREACH(cp, u->card->profiles, state) {
+        p_info = PA_CARD_PROFILE_DATA(cp);
+        if(p_info->sep && cp->available == PA_AVAILABLE_NO)
+            cp->available = PA_AVAILABLE_UNKNOWN;
+    }
+
     pa_card_put(u->card);
 
-    p = PA_CARD_PROFILE_DATA(u->card->active_profile);
-    u->profile = *p;
+    p_info = PA_CARD_PROFILE_DATA(u->card->active_profile);
+    u->profile = p_info->profile;
+    u->sep = p_info->sep;
 
     return 0;
 }
@@ -2096,6 +2153,9 @@ static void handle_transport_state_change(struct userdata *u, struct pa_bluetoot
     pa_card_profile *cp;
     pa_device_port *port;
     pa_available_t oldavail;
+    pa_card_profile *profile;
+    pa_bluetooth_profile_info_t *p_info;
+    void *state;
 
     pa_assert(u);
     pa_assert(t);
@@ -2113,6 +2173,13 @@ static void handle_transport_state_change(struct userdata *u, struct pa_bluetoot
     /* Acquire or release transport as needed */
     acquire = (t->state == PA_BLUETOOTH_TRANSPORT_STATE_PLAYING && u->profile == t->profile);
     release = (oldavail != PA_AVAILABLE_NO && t->state != PA_BLUETOOTH_TRANSPORT_STATE_PLAYING && u->profile == t->profile);
+
+    if(t->state >= PA_BLUETOOTH_TRANSPORT_STATE_IDLE)
+        PA_HASHMAP_FOREACH(profile, u->card->profiles, state) {
+            p_info = PA_CARD_PROFILE_DATA(profile);
+            if(p_info->sep && profile->available == PA_AVAILABLE_NO)
+                pa_card_profile_set_available(profile, PA_AVAILABLE_UNKNOWN);
+        }
 
     if (acquire && transport_acquire(u, true) >= 0) {
         if (u->source) {

@@ -39,6 +39,7 @@
 #define PA_BLUETOOTH_UUID_HFP_AG      "0000111f-0000-1000-8000-00805f9b34fb"
 
 typedef struct pa_bluetooth_transport pa_bluetooth_transport;
+typedef struct pa_bluetooth_stream_endpoint pa_bluetooth_stream_endpoint;
 typedef struct pa_bluetooth_device pa_bluetooth_device;
 typedef struct pa_bluetooth_adapter pa_bluetooth_adapter;
 typedef struct pa_bluetooth_discovery pa_bluetooth_discovery;
@@ -101,6 +102,22 @@ struct pa_bluetooth_transport {
     void *userdata;
 };
 
+struct pa_bluetooth_stream_endpoint {
+    pa_bluetooth_discovery *discovery;
+    pa_bluetooth_device *device;
+
+    char *path;
+    char *device_path;
+    char *uuid;
+    uint8_t codec;
+    uint8_t *config;
+    size_t config_size;
+
+    const pa_a2dp_codec_t *a2dp_codec;
+    pa_a2dp_codec_index_t codec_index;
+    bool valid;
+};
+
 struct pa_bluetooth_device {
     pa_bluetooth_discovery *discovery;
     pa_bluetooth_adapter *adapter;
@@ -109,6 +126,8 @@ struct pa_bluetooth_device {
     bool tried_to_link_with_adapter;
     bool valid;
     bool autodetect_mtu;
+
+    bool sep_setting_configuration;
 
     /* Device information */
     char *path;
@@ -162,6 +181,11 @@ void pa_bluetooth_transport_unlink(pa_bluetooth_transport *t);
 void pa_bluetooth_transport_free(pa_bluetooth_transport *t);
 
 bool pa_bluetooth_device_any_transport_connected(const pa_bluetooth_device *d);
+
+pa_bluetooth_stream_endpoint *pa_bluetooth_device_get_sep_by_codec_index(pa_bluetooth_device *d,
+                                                                         pa_a2dp_codec_index_t codec_index);
+
+void pa_bluetooth_sep_set_configuration(pa_bluetooth_stream_endpoint *sep, pa_sample_spec default_sample_spec, void (*cb)(bool success, void *data), void *cb_data);
 
 pa_bluetooth_device* pa_bluetooth_discovery_get_device_by_path(pa_bluetooth_discovery *y, const char *path);
 pa_bluetooth_device* pa_bluetooth_discovery_get_device_by_address(pa_bluetooth_discovery *y, const char *remote, const char *local);

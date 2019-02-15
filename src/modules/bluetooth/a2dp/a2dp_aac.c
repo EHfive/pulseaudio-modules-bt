@@ -549,6 +549,12 @@ static void pa_aac_setup_stream(void **codec_data) {
     if (aac_err != AACENC_OK)
         pa_assert_not_reached();
 
+    aac_err = aacEncEncode(aac_info->aacenc_handle, NULL, NULL, NULL, NULL);
+    if (aac_err != AACENC_OK)
+        pa_assert_not_reached();
+
+    pa_assert_se(AACENC_OK == aacEncInfo(aac_info->aacenc_handle, &aac_info->aacenc_info));
+
 };
 
 static void pa_aac_free(void **codec_data) {

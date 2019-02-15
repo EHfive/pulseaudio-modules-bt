@@ -100,7 +100,7 @@ pulseaudio --start
 
 ### Connect device
 
-Then connect your bluetooth device and switch audio profile to 'A2DP Sink';
+Connect your bluetooth device and switch audio profile to 'A2DP Sink';
 
 If there is only profile 'HSP/HFP' and 'off', disconnect and reconnect your device.
 
@@ -167,4 +167,4 @@ see [Wiki](https://github.com/EHfive/pulseaudio-modules-bt/wiki)
 
 ~~add AAC support using Fraunhofer FDK AAC codec library~~
 
-add codec switching support using latest blueZ's experimental feature
+~~add codec switching support using latest blueZ's experimental feature~~

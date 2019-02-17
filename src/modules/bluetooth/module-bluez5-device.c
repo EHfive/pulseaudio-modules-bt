@@ -1981,6 +1981,11 @@ static int set_profile_cb(pa_card *c, pa_card_profile *new_profile) {
             pa_log_warn("Refused to switch profile to %s: Not connected", new_profile->name);
             return -PA_ERR_IO;
         }
+
+        if (new_profile->available == PA_AVAILABLE_NO) {
+            pa_log_warn("Refused to switch profile to %s: Unavailable profile", new_profile->name);
+            return -PA_ERR_INVALID;
+        }
     }
 
     stop_thread(u);

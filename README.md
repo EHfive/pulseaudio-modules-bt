@@ -35,7 +35,7 @@ See bottom.
 * libdbus
 * ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
 * libsbc
-* libfdk-aac>=0.1.5
+* fdk-aac(-free)>=0.1.5: pulseaudio-modules-bt use LC-AAC only
 * libtool
 * cmake
 * pkg-config
@@ -46,9 +46,9 @@ See bottom.
 * bluez
 * dbus
 * sbc
-* libfdk-aac
-* [Optional] ffmpeg(libavcodec.so, libavutil.so) --- APTX, APTX-HD support
-* [Optional] [ldacBT](https://github.com/EHfive/ldacBT)/libldac (libldacBT_enc.so, libldacBT_abr.so)   --- LDAC encoding support, LDAC ABR support
+* fdk-aac(-free)
+* [Optional] ffmpeg(libavcodec.so, libavutil.so): APTX, APTX-HD support
+* [Optional] [ldacBT](https://github.com/EHfive/ldacBT)/libldac (libldacBT_enc.so, libldacBT_abr.so): LDAC encoding support, LDAC ABR support
 
 Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and installing libldac to PA modules dir.
 See cmake option `FORCE_BUILD_LDAC` or `FORCE_NOT_BUILD_LDAC` .
@@ -168,3 +168,23 @@ see [Wiki](https://github.com/EHfive/pulseaudio-modules-bt/wiki)
 ~~add AAC support using Fraunhofer FDK AAC codec library~~
 
 ~~add codec switching support using latest blueZ's experimental feature~~
+
+## Copyright
+```
+  pulseaudio-modules-bt
+
+  Copyright (C) 2018-2019  Huang-Huang Bao <eh5@sokka.cn>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <http://www.gnu.org/licenses/>.
+```

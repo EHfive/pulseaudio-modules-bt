@@ -24,4 +24,9 @@
 #define HAVE_BLUEZ_5_NATIVE_HEADSET
 #define PACKAGE_VERSION "@PulseAudio_VERSION@"
 
+#cmakedefine PA_A2DP_CODEC_APTX_FF
+#cmakedefine PA_A2DP_CODEC_APTX_HD_FF
+#cmakedefine PA_A2DP_CODEC_AAC_FDK
+#cmakedefine PA_A2DP_CODEC_LDAC
+
 #include <sys/socket.h>

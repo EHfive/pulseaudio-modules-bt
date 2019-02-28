@@ -26,6 +26,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_FLAGS "$ENV{CFLAGS} -O2 -Wall -Wno-builtin-macro-redefined -Wno-unused -fno-common -DFASTPATH")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/src/,,$(abspath $<))\"'")
 
+option(CODEC_AAC_FDK "LC-AAC support using fdk-aac(-free)" ON)
+option(CODEC_APTX_FF "aptX Classic support using FFmpeg" ON)
+option(CODEC_APTX_HD_FF "aptX HD support using FFmpeg" ON)
+option(CODEC_LDAC "LDAC encoding, abr support using libldac" ON)
 option(FORCE_LARGEST_PA_VERSION "Build for largest available version( <= PulseAudio git master) of PulseAudio" OFF)
 
 
@@ -36,15 +40,52 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(PulseAudio REQUIRED "libpulse")
 pkg_check_modules(DBUS REQUIRED "dbus-1")
 pkg_check_modules(SBC REQUIRED "sbc")
-pkg_check_modules(AVCODEC REQUIRED libavcodec>=58.18.100)
-pkg_check_modules(AVUTIL REQUIRED libavutil>=56.14.100)
-pkg_check_modules(FDKAAC REQUIRED "fdk-aac>=0.1.5")
-pkg_check_modules(LDACENC REQUIRED "ldacBT-enc")
-pkg_check_modules(LDACABR REQUIRED "ldacBT-abr")
+pkg_check_modules(AVCODEC libavcodec>=58.18.100)
+pkg_check_modules(AVUTIL libavutil>=56.14.100)
+pkg_check_modules(FDKAAC "fdk-aac>=0.1.5")
+pkg_check_modules(LDACENC "ldacBT-enc")
+pkg_check_modules(LDACABR "ldacBT-abr")
 
 set(LDAC_INCLUDE_DIRS ${LDACENC_INCLUDE_DIRS} ${LDACABR_INCLUDE_DIRS})
 set(PulseAudio_CORE_LIBDIR ${PulseAudio_LIBDIR}/pulseaudio)
 set(MOD_BT_DIR ${PROJECT_SOURCE_DIR}/src/modules/bluetooth)
+
+set(bluez5_util_SOURCES
+        ${MOD_BT_DIR}/backend-native.c
+        ${MOD_BT_DIR}/backend-ofono.c
+        ${MOD_BT_DIR}/bluez5-util.c
+        ${MOD_BT_DIR}/a2dp/a2dp_sbc.c
+        ${MOD_BT_DIR}/a2dp/a2dp_util.c
+        )
+
+if(${AVCODEC_FOUND} AND ${AVUTIL_FOUND})
+    if(${CODEC_APTX_FF} STREQUAL "ON")
+        set(PA_A2DP_CODEC_APTX_FF 1)
+        message("[A2DP] FFmpeg aptX support enabled")
+    endif()
+    if(${CODEC_APTX_HD_FF} STREQUAL "ON")
+        set(PA_A2DP_CODEC_APTX_HD_FF 1)
+        message("[A2DP] FFmpeg aptX HD support enabled")
+    endif()
+
+    if ("${PA_A2DP_CODEC_APTX_FF}" OR "${PA_A2DP_CODEC_APTX_HD_FF}")
+        set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_aptx.c)
+    endif ()
+endif()
+if (${FDKAAC_FOUND})
+    if(${CODEC_AAC_FDK} STREQUAL "ON")
+        set(PA_A2DP_CODEC_AAC_FDK 1)
+        set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_aac.c)
+        message("[A2DP] fdk-aac LC-AAC support enabled")
+    endif()
+endif()
+if (${LDACENC_FOUND} AND ${LDACABR_FOUND})
+    if(${CODEC_LDAC} STREQUAL "ON")
+        set(PA_A2DP_CODEC_LDAC 1)
+        set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_ldac.c)
+        message("[A2DP] LDAC support enabled")
+    endif()
+endif ()
 
 include_directories(.)
 include_directories(pa/src)
@@ -98,14 +139,7 @@ set(CMAKE_INSTALL_RPATH ${PulseAudio_CORE_LIBDIR}:${PulseAudio_modlibexecdir})
 
 # libbluez5-util
 add_library(bluez5-util SHARED
-        ${MOD_BT_DIR}/backend-native.c
-        ${MOD_BT_DIR}/backend-ofono.c
-        ${MOD_BT_DIR}/bluez5-util.c
-        ${MOD_BT_DIR}/a2dp/a2dp_sbc.c
-        ${MOD_BT_DIR}/a2dp/a2dp_aac.c
-        ${MOD_BT_DIR}/a2dp/a2dp_aptx.c
-        ${MOD_BT_DIR}/a2dp/a2dp_ldac.c
-        ${MOD_BT_DIR}/a2dp/a2dp_util.c
+        ${bluez5_util_SOURCES}
         )
 target_link_libraries(bluez5-util dl ${SBC_LIBRARIES} ${FDKAAC_LIBRARIES} ${DBUS_LIBRARIES} ${MOD_LIBS})
 

@@ -1598,28 +1598,28 @@ const char *pa_bluetooth_profile_to_string(pa_bluetooth_profile_t profile) {
 }
 
 const char *pa_bluetooth_a2dp_profile_to_string(pa_a2dp_codec_index_t codec_index) {
-    switch(codec_index) {
-        case PA_A2DP_SINK_SBC:
-            return "a2dp_source_sbc";
-        case PA_A2DP_SINK_AAC:
-            return "a2dp_source_aac";
-        case PA_A2DP_SINK_APTX:
-            return "a2dp_source_aptx";
-        case PA_A2DP_SINK_APTX_HD:
-            return "a2dp_source_aptx_hd";
-        case PA_A2DP_SOURCE_SBC:
-            return "a2dp_sink_sbc";
-        case PA_A2DP_SOURCE_AAC:
-            return "a2dp_sink_aac";
-        case PA_A2DP_SOURCE_APTX:
-            return "a2dp_sink_aptx";
-        case PA_A2DP_SOURCE_APTX_HD:
-            return "a2dp_sink_aptx_hd";
-        case PA_A2DP_SOURCE_LDAC:
-            return "a2dp_sink_ldac";
-        default:
-            return NULL;
-    }
+    if(codec_index == PA_A2DP_CODEC_INDEX_UNAVAILABLE)
+        return NULL;
+    else if(codec_index == PA_A2DP_SINK_SBC)
+        return "a2dp_source_sbc";
+    else if(codec_index == PA_A2DP_SOURCE_SBC)
+        return "a2dp_sink_sbc";
+    else if(codec_index == PA_A2DP_SINK_AAC)
+        return "a2dp_source_sbc";
+    else if(codec_index == PA_A2DP_SOURCE_AAC)
+        return "a2dp_sink_aac";
+    else if(codec_index == PA_A2DP_SINK_APTX)
+        return "a2dp_source_aptx";
+    else if(codec_index == PA_A2DP_SOURCE_APTX)
+        return "a2dp_sink_aptx";
+    else if(codec_index == PA_A2DP_SINK_APTX_HD)
+        return "a2dp_source_aptx_hd";
+    else if(codec_index == PA_A2DP_SOURCE_APTX_HD)
+        return "a2dp_sink_aptx_hd";
+    else if(codec_index == PA_A2DP_SOURCE_LDAC)
+        return "a2dp_sink_ldac";
+    else
+        return NULL;
 }
 
 const char *pa_bluetooth_profile_codec_to_string(pa_bluetooth_profile_t profile, const pa_a2dp_codec_t *a2dp_codec) {

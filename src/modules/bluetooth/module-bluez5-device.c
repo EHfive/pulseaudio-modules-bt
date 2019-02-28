@@ -1816,28 +1816,29 @@ static void create_card_ports(struct userdata *u, pa_hashmap *ports) {
 }
 
 static const char *a2dp_codec_index_to_description(pa_a2dp_codec_index_t codec_index) {
-    switch(codec_index) {
-        case PA_A2DP_SINK_SBC:
+        if (codec_index == PA_A2DP_CODEC_INDEX_UNAVAILABLE)
+            return NULL;
+        else if(codec_index == PA_A2DP_SINK_SBC)
             return "High Fidelity Capture (A2DP Source: SBC)";
-        case PA_A2DP_SINK_AAC:
+        else if(codec_index == PA_A2DP_SINK_AAC)
             return "High Fidelity Capture (A2DP Source: AAC)";
-        case PA_A2DP_SINK_APTX:
+        else if(codec_index == PA_A2DP_SINK_APTX)
             return "High Fidelity Capture (A2DP Source: APTX)";
-        case PA_A2DP_SINK_APTX_HD:
+        else if(codec_index == PA_A2DP_SINK_APTX_HD)
             return "High Fidelity Capture (A2DP Source: aptX HD)";
-        case PA_A2DP_SOURCE_SBC:
+        else if(codec_index == PA_A2DP_SOURCE_SBC)
             return "High Fidelity Playback (A2DP Sink: SBC)";
-        case PA_A2DP_SOURCE_AAC:
+        else if(codec_index == PA_A2DP_SOURCE_AAC)
             return "High Fidelity Playback (A2DP Sink: AAC)";
-        case PA_A2DP_SOURCE_APTX:
+        else if(codec_index == PA_A2DP_SOURCE_APTX)
             return "High Fidelity Playback (A2DP Sink: aptX)";
-        case PA_A2DP_SOURCE_APTX_HD:
+        else if(codec_index == PA_A2DP_SOURCE_APTX_HD)
             return "High Fidelity Playback (A2DP Sink: aptX HD)";
-        case PA_A2DP_SOURCE_LDAC:
+        else if(codec_index == PA_A2DP_SOURCE_LDAC)
             return "High Fidelity Playback (A2DP Sink: LDAC)";
-        default:
-            return "Unknown";
-    }
+        else
+            return NULL;
+
 }
 
 /* Run from main thread */
@@ -2084,6 +2085,7 @@ static int add_card(struct userdata *u) {
             profiles[0].profile_string = pa_bluetooth_profile_to_string(profile);
             profiles[0].codec_index = PA_A2DP_CODEC_INDEX_UNAVAILABLE;
         } else {
+            size_t cnt;
             pa_a2dp_codec_index_t sink_indices[] = {PA_A2DP_SOURCE_SBC, PA_A2DP_SOURCE_AAC, PA_A2DP_SOURCE_APTX,
                                                     PA_A2DP_SOURCE_APTX_HD, PA_A2DP_SOURCE_LDAC};
             pa_a2dp_codec_index_t source_indices[] = {PA_A2DP_SINK_SBC, PA_A2DP_SINK_AAC, PA_A2DP_SINK_APTX,
@@ -2098,7 +2100,12 @@ static int add_card(struct userdata *u) {
                 profiles_size = PA_ELEMENTSOF(source_indices);
             }
             profiles = pa_xnew(struct profile_codec, profiles_size);
-            for(int i = 0; i < profiles_size; ++i) {
+            cnt = profiles_size;
+            for(int i = 0; i < cnt; ++i) {
+                if(indices[i] == PA_A2DP_CODEC_INDEX_UNAVAILABLE){
+                    --profiles_size;
+                    continue;
+                }
                 profiles[i].profile_string = pa_bluetooth_a2dp_profile_to_string(indices[i]);
                 profiles[i].codec_index = indices[i];
 
@@ -2107,7 +2114,7 @@ static int add_card(struct userdata *u) {
         }
 
         for(int i=0; i< profiles_size; ++i){
-
+            pa_assert(profiles[i].profile_string);
             if (pa_hashmap_get(data.profiles, profiles[i].profile_string))
                 continue;
             cp = create_card_profile(u, profile, profiles[i].codec_index, data.ports);

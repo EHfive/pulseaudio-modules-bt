@@ -50,9 +50,6 @@ See bottom.
 * [Optional] ffmpeg(libavcodec.so, libavutil.so): APTX, APTX-HD support
 * [Optional] [ldacBT](https://github.com/EHfive/ldacBT)/libldac (libldacBT_enc.so, libldacBT_abr.so): LDAC encoding support, LDAC ABR support
 
-Note: CMakeLists.txt check if [ldacBT](https://github.com/EHfive/ldacBT) installed; If not, it will build libldac and installing libldac to PA modules dir.
-See cmake option `FORCE_BUILD_LDAC` or `FORCE_NOT_BUILD_LDAC` .
-
 #### Build
 
 **backup original pulseaudio bt modules**

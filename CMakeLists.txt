@@ -26,13 +26,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_FLAGS "$ENV{CFLAGS} -O2 -Wall -Wno-builtin-macro-redefined -Wno-unused -fno-common -DFASTPATH")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILE__='\"$(subst ${CMAKE_SOURCE_DIR}/src/,,$(abspath $<))\"'")
 
-option(FORCE_BUILD_LDAC "Build & Install ldac libraries anyway" OFF)
-option(FORCE_NOT_BUILD_LDAC "Don't build ldac libraries anyway" OFF)
 option(FORCE_LARGEST_PA_VERSION "Build for largest available version( <= PulseAudio git master) of PulseAudio" OFF)
 
-if(("${FORCE_BUILD_LDAC}" STREQUAL "ON") AND ("${FORCE_NOT_BUILD_LDAC}" STREQUAL "ON"))
-    message(FATAL_ERROR "FORCE_BUILD_LDAC and FORCE_NOT_BUILD_LDAC enabled sametime")
-endif()
 
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-D_REENTRANT)
@@ -44,21 +39,10 @@ pkg_check_modules(SBC REQUIRED "sbc")
 pkg_check_modules(AVCODEC REQUIRED libavcodec>=58.18.100)
 pkg_check_modules(AVUTIL REQUIRED libavutil>=56.14.100)
 pkg_check_modules(FDKAAC REQUIRED "fdk-aac>=0.1.5")
+pkg_check_modules(LDACENC REQUIRED "ldacBT-enc")
+pkg_check_modules(LDACABR REQUIRED "ldacBT-abr")
 
-pkg_check_modules(LDACENC "ldacBT-enc")
-pkg_check_modules(LDACABR "ldacBT-abr")
-
-if (("${LDACENC_FOUND}" AND "${LDACABR_FOUND}" AND ("${FORCE_BUILD_LDAC}" STREQUAL "OFF"))
-        OR ("${FORCE_NOT_BUILD_LDAC}" STREQUAL "ON"))
-    set(HAVE_SYSTEM_LDAC 1)
-    pkg_check_modules(LDACENC REQUIRED "ldacBT-enc")
-    pkg_check_modules(LDACABR REQUIRED "ldacBT-abr")
-    set(LDAC_INCLUDE_DIRS ${LDACENC_INCLUDE_DIRS} ${LDACABR_INCLUDE_DIRS})
-else()
-    set(HAVE_SYSTEM_LDAC 0)
-    set(LDAC_INCLUDE_DIRS libldac/inc libldac/abr/inc)
-endif()
-
+set(LDAC_INCLUDE_DIRS ${LDACENC_INCLUDE_DIRS} ${LDACABR_INCLUDE_DIRS})
 set(PulseAudio_CORE_LIBDIR ${PulseAudio_LIBDIR}/pulseaudio)
 set(MOD_BT_DIR ${PROJECT_SOURCE_DIR}/src/modules/bluetooth)
 
@@ -111,22 +95,6 @@ configure_file("${PROJECT_SOURCE_DIR}/config.h.in"  "${PROJECT_SOURCE_DIR}/confi
 set(MOD_LIBS ${PulseAudio_LIBRARIES} pthread pulsecommon-${PulseAudio_lib_version} pulsecore-${PulseAudio_lib_version})
 set(CMAKE_INSTALL_RPATH ${PulseAudio_CORE_LIBDIR}:${PulseAudio_modlibexecdir})
 
-if(NOT ${HAVE_SYSTEM_LDAC})
-# libldacBT_enc
-add_library(ldacBT_enc SHARED
-        libldac/src/ldaclib.c
-        libldac/src/ldacBT.c
-
-        )
-
-target_link_libraries(ldacBT_enc m)
-
-add_library(ldacBT_abr SHARED
-        libldac/abr/src/ldacBT_abr.c
-        )
-target_link_libraries(ldacBT_abr ldacBT_enc)
-
-endif()
 
 # libbluez5-util
 add_library(bluez5-util SHARED
@@ -188,11 +156,3 @@ INSTALL(TARGETS
         module-bluetooth-policy
         LIBRARY DESTINATION ${PulseAudio_modlibexecdir})
 
-if(NOT ${HAVE_SYSTEM_LDAC})
-
-INSTALL(TARGETS
-        ldacBT_enc
-        ldacBT_abr
-        LIBRARY DESTINATION ${PulseAudio_modlibexecdir})
-
-endif()

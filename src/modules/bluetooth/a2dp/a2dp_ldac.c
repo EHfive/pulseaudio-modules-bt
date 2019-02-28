@@ -30,8 +30,8 @@
 #include <pulse/xmalloc.h>
 #include <pulsecore/once.h>
 
-#include "ldacBT.h"
-#include "ldacBT_abr.h"
+#include <ldacBT.h>
+#include <ldacBT_abr.h>
 
 #include "a2dp-api.h"
 

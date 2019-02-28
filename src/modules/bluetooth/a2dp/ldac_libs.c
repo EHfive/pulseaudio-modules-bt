@@ -20,8 +20,8 @@
 #include <dlfcn.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include "ldacBT.h"
-#include "ldacBT_abr.h"
+#include <ldacBT.h>
+#include <ldacBT_abr.h>
 
 #ifdef HAVE_CONFIG_H
 

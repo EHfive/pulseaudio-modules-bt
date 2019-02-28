@@ -30,15 +30,15 @@ See bottom.
 
 **Make Dependencies**
 
-* pulseaudio,libpulse>=11.59.1
-* bluez-libs/libbluetooth~=5.0
-* libdbus
-* ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
-* libsbc
-* fdk-aac(-free)>=0.1.5: pulseaudio-modules-bt use LC-AAC only
-* libtool
+* pulseaudio>=11.59.1
+* bluez~=5.0
+* dbus
+* sbc
+* \[Optional] ffmpeg(libavcodec>=58, libavutil>=56) >= 4.0
+* \[Optional] fdk-aac(-free)>=0.1.5: pulseaudio-modules-bt use LC-AAC only
+* \[Optional] [ldacBT](https://github.com/EHfive/ldacBT)/libldac
 * cmake
-* pkg-config
+* pkg-config, libtool, ...
 
 **Runtime Dependencies**
 
@@ -46,9 +46,9 @@ See bottom.
 * bluez
 * dbus
 * sbc
-* fdk-aac(-free)
-* [Optional] ffmpeg(libavcodec.so, libavutil.so): APTX, APTX-HD support
-* [Optional] [ldacBT](https://github.com/EHfive/ldacBT)/libldac (libldacBT_enc.so, libldacBT_abr.so): LDAC encoding support, LDAC ABR support
+* \[ fdk-aac(-free) ]
+* \[  libavcodec.so ]: APTX, APTX-HD support \[Optional]
+* \[ libldac ]: LDAC encoding support, LDAC ABR support \[Optional]
 
 #### Build
 
@@ -68,7 +68,6 @@ git submodule update --init
 ```
 
 **install**
-
 A. build for PulseAudio releases (e.g., v12.0, v12.2, etc.)
 ```bash
 git -C pa/ checkout v`pkg-config libpulse --modversion|sed 's/[^0-9.]*\([0-9.]*\).*/\1/'`
@@ -81,11 +80,15 @@ sudo make install
 
 B. or build for PulseAudio git master
 ```bash
+git -C pa/ checkout master
 mkdir build && cd build
 cmake -DFORCE_LARGEST_PA_VERSION=ON ..
 make
 sudo make install
 ```
+
+*Cmake A2DP codecs options*: `CODEC_APTX_FF`, `CODEC_APTX_HD_FF`, `CODEC_APTX_AAC_FDK`, `CODEC_APTX_LDAC`
+
 #### Load Modules
 
 ```bash

@@ -166,7 +166,7 @@ static int card_acquire(struct hf_audio_card *card) {
                                       DBUS_TYPE_BYTE, &codec,
                                       DBUS_TYPE_INVALID) == true)) {
         dbus_message_unref(r);
-        if (codec != HFP_AUDIO_CODEC_CVSD) {
+        if (codec != HFP_AUDIO_CODEC_CVSD && codec != HFP_AUDIO_CODEC_MSBC) {
             pa_log_error("Invalid codec: %u", codec);
             /* shutdown to make sure connection is dropped immediately */
             shutdown(fd, SHUT_RDWR);
@@ -252,10 +252,17 @@ static int hf_audio_agent_transport_acquire(pa_bluetooth_transport *t, bool opti
      * value from the Isoc USB endpoint in use by btusb and should be
      * made available to userspace by the Bluetooth kernel subsystem.
      * Meanwhile the empiric value 48 will be used. */
-    if (imtu)
-        *imtu = 48;
-    if (omtu)
-        *omtu = 48;
+    if (t->codec == HFP_AUDIO_CODEC_MSBC) {
+        if (imtu)
+            *imtu = 60;
+        if (omtu)
+            *omtu = 60;
+    } else {
+        if (imtu)
+            *imtu = 48;
+        if (omtu)
+            *omtu = 48;
+   }
 
     err = socket_accept(card->fd);
     if (err < 0) {
@@ -466,6 +473,7 @@ static void hf_audio_agent_register(pa_bluetooth_backend *hf) {
     pa_assert_se(m = dbus_message_new_method_call(OFONO_SERVICE, "/", HF_AUDIO_MANAGER_INTERFACE, "Register"));
 
     codecs[ncodecs++] = HFP_AUDIO_CODEC_CVSD;
+    codecs[ncodecs++] = HFP_AUDIO_CODEC_MSBC;
 
     pa_assert_se(dbus_message_append_args(m, DBUS_TYPE_OBJECT_PATH, &path, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &pcodecs, ncodecs,
                                           DBUS_TYPE_INVALID));
@@ -613,7 +621,7 @@ static DBusMessage *hf_audio_agent_new_connection(DBusConnection *c, DBusMessage
 
     card->connecting = false;
 
-    if (!card || codec != HFP_AUDIO_CODEC_CVSD || card->fd >= 0) {
+    if (!card || (codec != HFP_AUDIO_CODEC_CVSD && codec != HFP_AUDIO_CODEC_MSBC) || card->fd >= 0) {
         pa_log_warn("New audio connection invalid arguments (path=%s fd=%d, codec=%d)", path, fd, codec);
         pa_assert_se(r = dbus_message_new_error(m, "org.ofono.Error.InvalidArguments", "Invalid arguments in method call"));
         shutdown(fd, SHUT_RDWR);

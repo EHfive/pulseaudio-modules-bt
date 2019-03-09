@@ -5,7 +5,7 @@
  *  pulseaudio-modules-bt
  *
  *  Copyright  2008-2013  João Paulo Rechi Vita
- *  Copyright  2018-2019  Huang-Huang Bao <eh5@sokka.cn>
+ *  Copyright  2018-2019  Huang-Huang Bao
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by

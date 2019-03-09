@@ -4,7 +4,7 @@
  *    Copyright 2006 Lennart Poettering
  *    Copyright 2009 Canonical Ltd
  *    Copyright (C) 2012 Intel Corporation
- *    Copyright 2018-2019  Huang-Huang Bao <eh5@sokka.cn>
+ *    Copyright 2018-2019  Huang-Huang Bao
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by

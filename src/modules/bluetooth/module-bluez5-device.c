@@ -2458,13 +2458,13 @@ static int add_card(struct userdata *u) {
             }
             profiles = pa_xnew(struct profile_codec, profiles_size);
             cnt = profiles_size;
-            for(int i = 0; i < cnt; ++i) {
+            for(int i = 0, j = 0; i < cnt; ++i) {
                 if(indices[i] == PA_A2DP_CODEC_INDEX_UNAVAILABLE){
                     --profiles_size;
                     continue;
                 }
-                profiles[i].profile_string = pa_bluetooth_a2dp_profile_to_string(indices[i]);
-                profiles[i].codec_index = indices[i];
+                profiles[j].profile_string = pa_bluetooth_a2dp_profile_to_string(indices[i]);
+                profiles[j++].codec_index = indices[i];
 
             }
 

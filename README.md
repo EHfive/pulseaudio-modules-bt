@@ -87,7 +87,7 @@ make
 sudo make install
 ```
 
-*Cmake A2DP codecs options*: `CODEC_APTX_FF`, `CODEC_APTX_HD_FF`, `CODEC_APTX_AAC_FDK`, `CODEC_APTX_LDAC`
+*Cmake A2DP codecs options*: `CODEC_APTX_FF`, `CODEC_APTX_HD_FF`, `CODEC_AAC_FDK`, `CODEC_LDAC`
 
 #### Load Modules
 

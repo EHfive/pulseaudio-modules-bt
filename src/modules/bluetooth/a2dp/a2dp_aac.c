@@ -47,6 +47,7 @@ typedef struct aac_info {
     bool aacenc_handle_opened;
     AACENC_InfoStruct aacenc_info;
 
+    uint32_t cfg_bitrate;
     uint32_t bitrate;
     size_t mtu;
 
@@ -321,7 +322,8 @@ pa_aac_config_transport(pa_sample_spec default_sample_spec, const void *configur
     pa_assert(aac_info);
     pa_assert_se(configuration_size == sizeof(*config));
 
-    aac_info->bitrate = PA_MIN(AAC_DEFAULT_BITRATE, ((uint32_t) AAC_GET_BITRATE(*config)));
+    aac_info->cfg_bitrate = (uint32_t) AAC_GET_BITRATE(*config);
+    aac_info->bitrate = PA_MAX(AAC_DEFAULT_BITRATE, aac_info->cfg_bitrate);
 
 
     if(aac_info->is_a2dp_sink)
@@ -549,7 +551,8 @@ static void pa_aac_setup_stream(void **codec_data) {
 
     max_bitrate = (uint32_t) ((8 * (aac_info->mtu - sizeof(struct rtp_header)) * aac_info->sample_spec.rate) / 1024);
 
-    aac_info->bitrate = PA_MIN(max_bitrate, aac_info->bitrate);
+    if (aac_info->bitrate > max_bitrate)
+        aac_info->bitrate = max_bitrate;
 
     pa_log_debug("Maximum AAC transmission bitrate: %d bps; Bitrate in use: %d bps", max_bitrate, aac_info->bitrate);
 

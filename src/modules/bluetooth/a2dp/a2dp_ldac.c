@@ -59,6 +59,9 @@ typedef struct ldac_info {
     int channel_mode;
     pa_sample_format_t force_pa_fmt;
     LDACBT_SMPL_FMT_T pcm_fmt;
+    unsigned int abr_t1;
+    unsigned int abr_t2;
+    unsigned int abr_t3;
     uint32_t pcm_frequency;
 
     uint16_t pcm_lsu;
@@ -94,6 +97,10 @@ pa_ldac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_f
         info->enable_abr = true;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
 
+    info->abr_t1 = LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ;
+    info->abr_t2 = LDAC_ABR_THRESHOLD_DANGEROUSTREND;
+    info->abr_t3 = LDAC_ABR_THRESHOLD_CRITICAL;
+
     for(int i=0;i<TX_LENGTH_ROUND_SIZE;++i)
         info->tx_length_round[i] = 0;
 
@@ -102,10 +109,14 @@ pa_ldac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_f
 
 static int pa_ldac_update_user_config(pa_proplist *user_config, void **codec_data) {
     ldac_info_t *i = *codec_data;
-    const char *ldac_eqmid_str, *ldac_fmt_str;
+    const char *ldac_eqmid_str, *ldac_fmt_str, *abr_t1_str, *abr_t2_str, *abr_t3_str;
+    unsigned int abr_t1, abr_t2, abr_t3;
     int ret = 0;
     ldac_eqmid_str = pa_proplist_gets(user_config, "ldac_eqmid");
     ldac_fmt_str = pa_proplist_gets(user_config, "ldac_fmt");
+    abr_t1_str = pa_proplist_gets(user_config, "ldac_abr_t1");
+    abr_t2_str = pa_proplist_gets(user_config, "ldac_abr_t2");
+    abr_t3_str = pa_proplist_gets(user_config, "ldac_abr_t3");
 
     pa_log_debug("LDAC ABR library loaded: %s",ldac_abr_loaded?"true":"false");
 
@@ -153,6 +164,20 @@ static int pa_ldac_update_user_config(pa_proplist *user_config, void **codec_dat
             pa_log("ldac_fmt parameter must be either s16, s24, s32, f32 or auto (found %s)", ldac_fmt_str);
         }
     }
+    
+    abr_t1 = abr_t1_str ? (unsigned int) atoi(abr_t1_str) : i->abr_t1;
+    abr_t2 = abr_t2_str ? (unsigned int) atoi(abr_t2_str) : i->abr_t2;
+    abr_t3 = abr_t3_str ? (unsigned int) atoi(abr_t3_str) : i->abr_t3;
+
+    if (0 < abr_t1 && abr_t1 <= abr_t2 && abr_t2 <= abr_t3) {
+        i->abr_t1 = abr_t1;
+        i->abr_t2 = abr_t2;
+        i->abr_t3 = abr_t3;
+        ret += i->abr_t1 != abr_t1;
+        ret += i->abr_t2 != abr_t2;
+        ret += i->abr_t3 != abr_t3;
+    } else
+        pa_log("ldac_abr_t1,2,3 parameter(s) invalid, ensure 0 < ldac_abr_t1 <= ldac_abr_t2 <= ldac_abr_t3");
 
     return ret;
 }

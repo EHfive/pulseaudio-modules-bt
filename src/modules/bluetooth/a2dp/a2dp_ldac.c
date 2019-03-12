@@ -45,6 +45,7 @@
 #define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
 #define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
 
+#define TX_LENGTH_ROUND_SIZE 3
 
 typedef struct ldac_info {
     HANDLE_LDAC_BT hLdacBt;
@@ -69,6 +70,9 @@ typedef struct ldac_info {
     uint16_t seq_num;
     uint32_t layer_specific;
     uint32_t written;
+    size_t tx_length_round[TX_LENGTH_ROUND_SIZE];
+    int tx_length_index;
+
     size_t tx_length;
 
     size_t mtu;
@@ -89,6 +93,10 @@ pa_ldac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_f
     if(ldac_abr_loaded)
         info->enable_abr = true;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
+
+    for(int i=0;i<TX_LENGTH_ROUND_SIZE;++i)
+        info->tx_length_round[i] = 0;
+
     return true;
 }
 
@@ -168,7 +176,6 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         ldac_ABR_Proc_func(ldac_info->hLdacBt, ldac_info->hLdacAbr,
                       (unsigned int) (ldac_info->tx_length / ldac_info->q_write_block_size),
                       (unsigned int) ldac_info->enable_abr);
-        ldac_info->tx_length = 0;
     }
 
 
@@ -441,7 +448,16 @@ fail1:
 static void pa_ldac_set_tx_length(size_t len, void **codec_data) {
     ldac_info_t *ldac_info = *codec_data;
     pa_assert(ldac_info);
-    ldac_info->tx_length += len;
+
+    if (!len) {
+        size_t prev;
+        prev = ldac_info->tx_length_round[(ldac_info->tx_length_index + TX_LENGTH_ROUND_SIZE - 1)/TX_LENGTH_ROUND_SIZE];
+        len = (prev + len) / 2;
+    }
+
+    ldac_info->tx_length_round[ldac_info->tx_length_index] = len;
+    ldac_info->tx_length_index = (ldac_info->tx_length_index + 1) / TX_LENGTH_ROUND_SIZE;
+    ldac_info->tx_length = ldac_info->tx_length_round[(ldac_info->tx_length_index + 1)/TX_LENGTH_ROUND_SIZE];
 };
 
 static void pa_ldac_free(void **codec_data) {

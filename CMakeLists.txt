@@ -57,6 +57,8 @@ set(bluez5_util_SOURCES
         ${MOD_BT_DIR}/a2dp/a2dp_sbc.c
         ${MOD_BT_DIR}/a2dp/a2dp_util.c
         )
+set(bluez5_util_RPATH "")
+set(bluez5_util_LIBS "")
 
 if(${AVCODEC_FOUND} AND ${AVUTIL_FOUND})
     if(${CODEC_APTX_FF} STREQUAL "ON")
@@ -70,12 +72,16 @@ if(${AVCODEC_FOUND} AND ${AVUTIL_FOUND})
 
     if ("${PA_A2DP_CODEC_APTX_FF}" OR "${PA_A2DP_CODEC_APTX_HD_FF}")
         set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_aptx.c)
+        if(NOT "${AVCODEC_LIBRARY_DIRS}" STREQUAL "")
+            set(bluez5_util_RPATH ${bluez5_util_RPATH}:${AVCODEC_LIBRARY_DIRS})
+        endif()
     endif ()
 endif()
 if (${FDKAAC_FOUND})
     if(${CODEC_AAC_FDK} STREQUAL "ON")
         set(PA_A2DP_CODEC_AAC_FDK 1)
         set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_aac.c)
+        set(bluez5_util_LIBS ${bluez5_util_LIBS} ${FDKAAC_LIBRARIES})
         message("[A2DP] fdk-aac LC-AAC support enabled")
     endif()
 endif()
@@ -83,6 +89,9 @@ if (${LDACENC_FOUND} AND ${LDACABR_FOUND})
     if(${CODEC_LDAC} STREQUAL "ON")
         set(PA_A2DP_CODEC_LDAC 1)
         set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_ldac.c)
+        if(NOT "${LDACENC_LIBRARY_DIRS}" STREQUAL "")
+            set(bluez5_util_RPATH ${bluez5_util_RPATH}:${LDACENC_LIBRARY_DIRS})
+        endif()
         message("[A2DP] LDAC support enabled")
     endif()
 endif ()
@@ -97,6 +106,12 @@ include_directories(${AVCODEC_INCLUDE_DIRS} ${AVUTIL_INCLUDE_DIRS})
 include_directories(${FDKAAC_INCLUDE_DIRS})
 
 link_directories(${PulseAudio_CORE_LIBDIR})
+link_directories(${PulseAudio_LIBRARY_DIRS})
+link_directories(${DBUS_LIBRARY_DIRS})
+link_directories(${SBC_LIBRARY_DIRS})
+link_directories(${AVCODEC_LIBRARY_DIRS} ${AVUTIL_LIBRARY_DIRS})
+link_directories(${FDKAAC_LIBRARY_DIRS})
+link_directories(${LDACENC_LIBRARY_DIRS} ${LDACABR_LIBRARY_DIRS})
 
 
 string(REGEX MATCH "[0-9]+(\\.[0-9]+)*" PulseAudio_lib_version ${PulseAudio_VERSION})
@@ -141,7 +156,17 @@ set(CMAKE_INSTALL_RPATH ${PulseAudio_CORE_LIBDIR}:${PulseAudio_modlibexecdir})
 add_library(bluez5-util SHARED
         ${bluez5_util_SOURCES}
         )
-target_link_libraries(bluez5-util dl ${SBC_LIBRARIES} ${FDKAAC_LIBRARIES} ${DBUS_LIBRARIES} ${MOD_LIBS})
+set(bluez5_util_LIBS ${bluez5_util_LIBS} ${SBC_LIBRARIES} ${DBUS_LIBRARIES} ${MOD_LIBS} dl)
+target_link_libraries(bluez5-util ${bluez5_util_LIBS})
+
+if(NOT "${bluez5_util_RPATH}" STREQUAL "")
+    set(bluez5_util_RPATH "${CMAKE_INSTALL_RPATH}${bluez5_util_RPATH}")
+else()
+    set(bluez5_util_RPATH "${CMAKE_INSTALL_RPATH}")
+endif()
+set_target_properties(bluez5-util PROPERTIES
+        INSTALL_RPATH "${bluez5_util_RPATH}"
+        )
 
 # module-bluez5-discover
 add_library(module-bluez5-discover MODULE

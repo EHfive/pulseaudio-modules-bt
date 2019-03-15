@@ -449,8 +449,7 @@ static void pa_ldac_setup_stream(void **codec_data) {
         goto fail1;
     }
 
-    ldac_ABR_set_thresholds_func(ldac_info->hLdacAbr, LDAC_ABR_THRESHOLD_CRITICAL,
-                            LDAC_ABR_THRESHOLD_DANGEROUSTREND, LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ);
+    ldac_ABR_set_thresholds_func(ldac_info->hLdacAbr, ldac_info->abr_t3, ldac_info->abr_t2, ldac_info->abr_t1);
     return;
 
 fail:

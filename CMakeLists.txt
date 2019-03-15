@@ -71,7 +71,7 @@ if(${AVCODEC_FOUND} AND ${AVUTIL_FOUND})
     endif()
 
     if ("${PA_A2DP_CODEC_APTX_FF}" OR "${PA_A2DP_CODEC_APTX_HD_FF}")
-        set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_aptx.c)
+        set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/a2dp/a2dp_aptx.c ${MOD_BT_DIR}/a2dp/ffmpeg_libs.c)
         if(NOT "${AVCODEC_LIBRARY_DIRS}" STREQUAL "")
             set(bluez5_util_RPATH ${bluez5_util_RPATH}:${AVCODEC_LIBRARY_DIRS})
         endif()

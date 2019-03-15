@@ -32,6 +32,8 @@
 
 #include <pulsecore/log.h>
 
+#include "ffmpeg_libs.h"
+
 static const char *AVCODEC_LIB_NAME = "libavcodec.so";
 
 static const char *avcodec_find_decoder_func_name = "avcodec_find_decoder";
@@ -46,40 +48,17 @@ static const char *avcodec_alloc_context3_func_name = "avcodec_alloc_context3";
 static const char *avcodec_free_context_func_name = "avcodec_free_context";
 static const char *avcodec_open2_func_name = "avcodec_open2";
 
-typedef AVCodec *(*avcodec_find_decoder_func_t)(enum AVCodecID id);
-
-typedef AVCodec *(*avcodec_find_encoder_func_t)(enum AVCodecID id);
-
-typedef AVPacket *(*av_packet_alloc_func_t)(void);
-
-typedef void (*av_packet_free_func_t)(AVPacket **pkt);
-
-typedef int (*avcodec_send_packet_func_t)(AVCodecContext *avctx, const AVPacket *avpkt);
-
-typedef int (*avcodec_receive_frame_func_t)(AVCodecContext *avctx, AVFrame *frame);
-
-typedef int (*avcodec_send_frame_func_t)(AVCodecContext *avctx, const AVFrame *frame);
-
-typedef int (*avcodec_receive_packet_func_t)(AVCodecContext *avctx, AVPacket *avpkt);
-
-typedef AVCodecContext *(*avcodec_alloc_context3_func_t)(const AVCodec *codec);
-
-typedef void (*avcodec_free_context_func_t)(AVCodecContext **avctx);
-
-typedef int (*avcodec_open2_func_t)(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options);
-
-
-static avcodec_find_decoder_func_t avcodec_find_decoder_func;
-static avcodec_find_encoder_func_t avcodec_find_encoder_func;
-static av_packet_alloc_func_t av_packet_alloc_func;
-static av_packet_free_func_t av_packet_free_func;
-static avcodec_send_packet_func_t avcodec_send_packet_func;
-static avcodec_receive_frame_func_t avcodec_receive_frame_func;
-static avcodec_send_frame_func_t avcodec_send_frame_func;
-static avcodec_receive_packet_func_t avcodec_receive_packet_func;
-static avcodec_alloc_context3_func_t avcodec_alloc_context3_func;
-static avcodec_free_context_func_t avcodec_free_context_func;
-static avcodec_open2_func_t avcodec_open2_func;
+avcodec_find_decoder_func_t avcodec_find_decoder_func;
+avcodec_find_encoder_func_t avcodec_find_encoder_func;
+av_packet_alloc_func_t av_packet_alloc_func;
+av_packet_free_func_t av_packet_free_func;
+avcodec_send_packet_func_t avcodec_send_packet_func;
+avcodec_receive_frame_func_t avcodec_receive_frame_func;
+avcodec_send_frame_func_t avcodec_send_frame_func;
+avcodec_receive_packet_func_t avcodec_receive_packet_func;
+avcodec_alloc_context3_func_t avcodec_alloc_context3_func;
+avcodec_free_context_func_t avcodec_free_context_func;
+avcodec_open2_func_t avcodec_open2_func;
 
 static const char *AVUTIL_LIB_NAME = "libavutil.so";
 
@@ -88,22 +67,10 @@ static const char *av_frame_get_buffer_func_name = "av_frame_get_buffer";
 static const char *av_frame_make_writable_func_name = "av_frame_make_writable";
 static const char *av_frame_free_func_name = "av_frame_free";
 
-
-typedef AVFrame *(*av_frame_alloc_func_t)(void);
-
-
-typedef int (*av_frame_get_buffer_func_t)(AVFrame *frame, int align);
-
-typedef int (*av_frame_make_writable_func_t)(AVFrame *frame);
-
-typedef void (*av_frame_free_func_t)(AVFrame **frame);
-
-
-static av_frame_alloc_func_t av_frame_alloc_func;
-static av_frame_get_buffer_func_t av_frame_get_buffer_func;
-static av_frame_make_writable_func_t av_frame_make_writable_func;
-static av_frame_free_func_t av_frame_free_func;
-
+av_frame_alloc_func_t av_frame_alloc_func;
+av_frame_get_buffer_func_t av_frame_get_buffer_func;
+av_frame_make_writable_func_t av_frame_make_writable_func;
+av_frame_free_func_t av_frame_free_func;
 
 static void *libavcodec_h = NULL;
 
@@ -216,7 +183,7 @@ static bool libavutil_load() {
     return true;
 }
 
-static bool aptx_libs_load() {
+bool ffmpeg_libs_load() {
     if (libavcodec_load() && libavutil_load())
         return true;
     libavcodec_unload();

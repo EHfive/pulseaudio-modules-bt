@@ -28,7 +28,7 @@
 
 #include "a2dp-api.h"
 
-#include "aptx_libs.c"
+#include "ffmpeg_libs.h"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
@@ -61,7 +61,7 @@ static const AVCodec *av_codec_aptx_hd_encoder = NULL;
 
 
 static bool pa_aptx_decoder_load() {
-    if(!aptx_libs_load())
+    if(!ffmpeg_libs_load())
         return false;
     if (av_codec_aptx_decoder)
         return true;
@@ -75,7 +75,7 @@ static bool pa_aptx_decoder_load() {
 }
 
 static bool pa_aptx_encoder_load() {
-    if(!aptx_libs_load())
+    if(!ffmpeg_libs_load())
         return false;
     if (av_codec_aptx_encoder)
         return true;
@@ -89,7 +89,7 @@ static bool pa_aptx_encoder_load() {
 }
 
 static bool pa_aptx_hd_decoder_load() {
-    if(!aptx_libs_load())
+    if(!ffmpeg_libs_load())
         return false;
     if (av_codec_aptx_hd_decoder)
         return true;
@@ -103,7 +103,7 @@ static bool pa_aptx_hd_decoder_load() {
 }
 
 static bool pa_aptx_hd_encoder_load() {
-    if(!aptx_libs_load())
+    if(!ffmpeg_libs_load())
         return false;
     if (av_codec_aptx_hd_encoder)
         return true;

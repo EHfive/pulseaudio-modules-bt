@@ -35,7 +35,7 @@
 
 #include "a2dp-api.h"
 
-#include "ldac_libs.c"
+#include "ldac_libs.h"
 
 #define streq(a, b) (!strcmp((a),(b)))
 
@@ -89,7 +89,7 @@ pa_ldac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_f
     info->read_pcm = read_cb;
     info->read_buf_free = free_cb;
     info->eqmid = LDACBT_EQMID_HQ;
-    if(ldac_abr_loaded)
+    if(is_ldac_abr_loaded())
         info->enable_abr = true;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
 
@@ -111,7 +111,7 @@ static int pa_ldac_update_user_config(pa_proplist *user_config, void **codec_dat
     abr_t2_str = pa_proplist_gets(user_config, "ldac_abr_t2");
     abr_t3_str = pa_proplist_gets(user_config, "ldac_abr_t3");
 
-    pa_log_debug("LDAC ABR library loaded: %s",ldac_abr_loaded?"true":"false");
+    pa_log_debug("LDAC ABR library loaded: %s",is_ldac_abr_loaded()?"true":"false");
 
     if (ldac_eqmid_str) {
         if (streq(ldac_eqmid_str, "hq")) {
@@ -129,7 +129,7 @@ static int pa_ldac_update_user_config(pa_proplist *user_config, void **codec_dat
         } else if (streq(ldac_eqmid_str, "auto") ||
                    streq(ldac_eqmid_str, "abr")) {
             i->eqmid = LDACBT_EQMID_HQ;
-            if(ldac_abr_loaded)
+            if(is_ldac_abr_loaded())
                 i->enable_abr = true;
             ret++;
         } else {
@@ -435,7 +435,7 @@ static void pa_ldac_setup_stream(void **codec_data) {
         goto fail;
     }
 
-    if (!ldac_abr_loaded)
+    if (!is_ldac_abr_loaded())
         return;
 
     if (ldac_info->hLdacAbr)
@@ -456,7 +456,7 @@ static void pa_ldac_setup_stream(void **codec_data) {
 fail:
     ldacBT_free_handle_func(ldac_info->hLdacBt);
     ldac_info->hLdacBt = NULL;
-    if (!ldac_abr_loaded)
+    if (!is_ldac_abr_loaded())
         return;
 fail1:
     ldac_ABR_free_handle_func(ldac_info->hLdacAbr);
@@ -478,7 +478,7 @@ static void pa_ldac_free(void **codec_data) {
     if (ldac_info->hLdacBt)
         ldacBT_free_handle_func(ldac_info->hLdacBt);
 
-    if (ldac_info->hLdacAbr && ldac_abr_loaded)
+    if (ldac_info->hLdacAbr && is_ldac_abr_loaded())
         ldac_ABR_free_handle_func(ldac_info->hLdacAbr);
 
     pa_xfree(ldac_info);

@@ -20,8 +20,6 @@
 #include <dlfcn.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <ldacBT.h>
-#include <ldacBT_abr.h>
 
 #ifdef HAVE_CONFIG_H
 
@@ -30,6 +28,8 @@
 #endif
 
 #include <pulsecore/log.h>
+
+#include "ldac_libs.h"
 
 static const char *LDAC_ENCODER_LIB_NAME = "libldacBT_enc.so";
 
@@ -56,64 +56,25 @@ static const char *LDAC_ABR_SET_THRESHOLDS_FUNC_NAME = "ldac_ABR_set_thresholds"
 static const char *LDAC_ABR_PROC_FUNC_NAME = "ldac_ABR_Proc";
 
 
-typedef HANDLE_LDAC_BT (*ldacBT_get_handle_func_t)(void);
-
-typedef void (*ldacBT_free_handle_func_t)(HANDLE_LDAC_BT hLdacBt);
-
-typedef void (*ldacBT_close_handle_func_t)(HANDLE_LDAC_BT hLdacBt);
-
-typedef int  (*ldacBT_get_version_func_t)(void);
-
-typedef int  (*ldacBT_get_sampling_freq_func_t)(HANDLE_LDAC_BT hLdacBt);
-
-typedef int  (*ldacBT_get_bitrate_func_t)(HANDLE_LDAC_BT hLdacBt);
-
-typedef int  (*ldacBT_init_handle_encode_func_t)(HANDLE_LDAC_BT hLdacBt, int mtu, int eqmid, int cm,
-                                                 LDACBT_SMPL_FMT_T fmt, int sf);
-
-typedef int  (*ldacBT_set_eqmid_func_t)(HANDLE_LDAC_BT hLdacBt, int eqmid);
-
-typedef int  (*ldacBT_get_eqmid_func_t)(HANDLE_LDAC_BT hLdacBt);
-
-typedef int  (*ldacBT_alter_eqmid_priority_func_t)(HANDLE_LDAC_BT hLdacBt, int priority);
-
-typedef int  (*ldacBT_encode_func_t)(HANDLE_LDAC_BT hLdacBt, void *p_pcm, int *pcm_used,
-                                     unsigned char *p_stream, int *stream_sz, int *frame_num);
-
-typedef int  (*ldacBT_get_error_code_func_t)(HANDLE_LDAC_BT hLdacBt);
+ldacBT_get_handle_func_t ldacBT_get_handle_func;
+ldacBT_free_handle_func_t ldacBT_free_handle_func;
+ldacBT_close_handle_func_t ldacBT_close_handle_func;
+ldacBT_get_version_func_t ldacBT_get_version_func;
+ldacBT_get_sampling_freq_func_t ldacBT_get_sampling_freq_func;
+ldacBT_get_bitrate_func_t ldacBT_get_bitrate_func;
+ldacBT_init_handle_encode_func_t ldacBT_init_handle_encode_func;
+ldacBT_set_eqmid_func_t ldacBT_set_eqmid_func;
+ldacBT_get_eqmid_func_t ldacBT_get_eqmid_func;
+ldacBT_alter_eqmid_priority_func_t ldacBT_alter_eqmid_priority_func;
+ldacBT_encode_func_t ldacBT_encode_func;
+ldacBT_get_error_code_func_t ldacBT_get_error_code_func;
 
 
-typedef HANDLE_LDAC_ABR (*ldac_ABR_get_handle_func_t)(void);
-
-typedef void (*ldac_ABR_free_handle_func_t)(HANDLE_LDAC_ABR hLdacAbr);
-
-typedef int (*ldac_ABR_Init_func_t)(HANDLE_LDAC_ABR hLdacAbr, unsigned int interval_ms);
-
-typedef int (*ldac_ABR_set_thresholds_func_t)(HANDLE_LDAC_ABR hLdacAbr, unsigned int thCritical,
-                                              unsigned int thDangerousTrend, unsigned int thSafety4HQSQ);
-
-typedef int (*ldac_ABR_Proc_func_t)(HANDLE_LDAC_BT hLdacBt, HANDLE_LDAC_ABR hLdacAbr,
-                                    unsigned int TxQueueDepth, unsigned int flagEnable);
-
-static ldacBT_get_handle_func_t ldacBT_get_handle_func;
-static ldacBT_free_handle_func_t ldacBT_free_handle_func;
-static ldacBT_close_handle_func_t ldacBT_close_handle_func;
-static ldacBT_get_version_func_t ldacBT_get_version_func;
-static ldacBT_get_sampling_freq_func_t ldacBT_get_sampling_freq_func;
-static ldacBT_get_bitrate_func_t ldacBT_get_bitrate_func;
-static ldacBT_init_handle_encode_func_t ldacBT_init_handle_encode_func;
-static ldacBT_set_eqmid_func_t ldacBT_set_eqmid_func;
-static ldacBT_get_eqmid_func_t ldacBT_get_eqmid_func;
-static ldacBT_alter_eqmid_priority_func_t ldacBT_alter_eqmid_priority_func;
-static ldacBT_encode_func_t ldacBT_encode_func;
-static ldacBT_get_error_code_func_t ldacBT_get_error_code_func;
-
-
-static ldac_ABR_get_handle_func_t ldac_ABR_get_handle_func;
-static ldac_ABR_free_handle_func_t ldac_ABR_free_handle_func;
-static ldac_ABR_Init_func_t ldac_ABR_Init_func;
-static ldac_ABR_set_thresholds_func_t ldac_ABR_set_thresholds_func;
-static ldac_ABR_Proc_func_t ldac_ABR_Proc_func;
+ldac_ABR_get_handle_func_t ldac_ABR_get_handle_func;
+ldac_ABR_free_handle_func_t ldac_ABR_free_handle_func;
+ldac_ABR_Init_func_t ldac_ABR_Init_func;
+ldac_ABR_set_thresholds_func_t ldac_ABR_set_thresholds_func;
+ldac_ABR_Proc_func_t ldac_ABR_Proc_func;
 
 static void *ldac_encoder_lib_h = NULL;
 static void *ldac_abr_lib_h = NULL;
@@ -256,11 +217,15 @@ static void ldac_encoder_unload() {
     ldac_ABR_Proc_func = NULL;
 }
 
-static bool ldac_encoder_load() {
+bool ldac_encoder_load() {
     if (!_ldac_encoder_load()) {
         pa_log_debug("Cannot load the LDAC encoder library");
         ldac_encoder_unload();
         return false;
     }
     return true;
+}
+
+bool is_ldac_abr_loaded() {
+    return ldac_abr_lib_h ? true : false;
 }

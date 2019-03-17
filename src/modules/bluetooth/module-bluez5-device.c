@@ -466,6 +466,11 @@ static int a2dp_process_render(struct userdata *u) {
                                                &encoded, u, &u->a2dp_info.a2dp_source_data);
     if(nbytes == 0)
         return -1;
+    else if(nbytes == -EINPROGRESS){
+        u->write_index += encoded;
+        return 1;
+    }
+
 
     for (;;) {
         ssize_t l;
@@ -1466,7 +1471,7 @@ static void thread_func(void *userdata) {
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % bytes_to_send),
+                            skip_bytes = pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % u->write_block_size),
                                                         &u->sample_spec);
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 

@@ -20,6 +20,7 @@
 
 #include <arpa/inet.h>
 #include <string.h>
+#include <errno.h>
 
 #ifdef HAVE_CONFIG_H
 
@@ -44,6 +45,9 @@
 #define LDAC_ABR_THRESHOLD_CRITICAL 6
 #define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
 #define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
+
+
+#define LDAC_ABR_INTERVAL_MS 20
 
 
 typedef struct ldac_info {
@@ -73,6 +77,12 @@ typedef struct ldac_info {
     uint32_t layer_specific;
     uint32_t written;
     size_t tx_length;
+
+    size_t interval_bytes;
+    size_t read_bytes;
+
+    uint8_t buf_index;
+    void *buf;
 
     size_t mtu;
 
@@ -189,13 +199,32 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
     pa_assert(ldac_info);
     pa_assert(ldac_info->hLdacBt);
 
-
-    if (ldac_info->hLdacAbr && ldac_info->enable_abr) {
-        ldac_ABR_Proc_func(ldac_info->hLdacBt, ldac_info->hLdacAbr,
-                      (unsigned int) (ldac_info->tx_length / ldac_info->q_write_block_size),
-                      (unsigned int) ldac_info->enable_abr);
-        ldac_info->tx_length = 0;
+    if(PA_UNLIKELY(ldac_info->buf != write_buf && ldac_info->buf)){
+        int ret;
+        ldac_info->buf_index = 0;
+        ldacBT_close_handle_func(ldac_info->hLdacBt);
+        ret = ldacBT_init_handle_encode_func(ldac_info->hLdacBt,
+                                             (int) ldac_info->mtu + AVDT_MEDIA_HDR_SIZE,
+                                             ldac_info->eqmid,
+                                             ldac_info->channel_mode,
+                                             ldac_info->pcm_fmt,
+                                             ldac_info->pcm_frequency);
+        if (ret != 0) {
+            pa_log_warn("Failed to init ldacBT handle");
+            return 0;
+        }
     }
+
+    if (!ldac_info->buf_index && ldac_info->hLdacAbr && ldac_info->enable_abr &&
+        ldac_info->read_bytes >= ldac_info->interval_bytes) {
+        ldac_ABR_Proc_func(ldac_info->hLdacBt, ldac_info->hLdacAbr,
+                           (unsigned int) (ldac_info->tx_length / ldac_info->q_write_block_size),
+                           (unsigned int) ldac_info->enable_abr);
+        ldac_info->tx_length = 0;
+        ldac_info->read_bytes = 0;
+    }
+
+    ldac_info->buf = write_buf;
 
 
     ldac_enc_read = (pa_frame_size(&ldac_info->sample_spec) * LDACBT_ENC_LSU);
@@ -205,12 +234,10 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
 
     frame_count = 0;
 
-    /* MAX pcm size for 1 LDAC packet (LDAC MQ) */
-    to_encode = (ldac_info->mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
-                / 110 * ldac_info->pcm_read_size;
+    to_encode = ldac_info->q_write_block_size;
 
-    d = (uint8_t *) write_buf + sizeof(*header) + sizeof(*payload);
-    to_write = write_buf_size - sizeof(*header) - sizeof(*payload);
+    d = (uint8_t *) write_buf + sizeof(*header) + sizeof(*payload) + ldac_info->buf_index;
+    to_write = write_buf_size - sizeof(*header) - sizeof(*payload) - ldac_info->buf_index;
 
     *_encoded = 0;
     while (PA_LIKELY(to_encode > 0 && to_write > 0 && frame_count == 0)) {
@@ -242,11 +269,14 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         to_encode -= encoded;
 
         d = (uint8_t *) d + written;
+        ldac_info->buf_index += written;
         to_write -= written;
 
         frame_count += ldac_frame_num;
 
     }
+
+    ldac_info->read_bytes += *_encoded;
 
 
     PA_ONCE_BEGIN
@@ -259,6 +289,10 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
                     );
                 }
     PA_ONCE_END;
+
+    if(frame_count == 0)
+        return -EINPROGRESS;
+    ldac_info->buf_index = 0;
 
     /* write it to the fifo */
     memset(write_buf, 0, sizeof(*header) + sizeof(*payload));
@@ -397,6 +431,7 @@ pa_ldac_config_transport(pa_sample_spec default_sample_spec, const void *configu
 
     ldac_info->sample_spec = *sample_spec;
     ldac_info->pcm_read_size = (ldac_info->pcm_lsu * pa_frame_size(&ldac_info->sample_spec));
+    ldac_info->interval_bytes = pa_usec_to_bytes(LDAC_ABR_INTERVAL_MS * 1000, &ldac_info->sample_spec);
 
 };
 
@@ -419,6 +454,8 @@ static void pa_ldac_setup_stream(void **codec_data) {
 
     ldac_info->layer_specific = 0;
     ldac_info->written = 0;
+    ldac_info->buf = NULL;
+    ldac_info->buf_index = 0;
     if (ldac_info->hLdacBt)
         ldacBT_free_handle_func(ldac_info->hLdacBt);
     ldac_info->hLdacBt = ldacBT_get_handle_func();
@@ -442,8 +479,7 @@ static void pa_ldac_setup_stream(void **codec_data) {
         ldac_ABR_free_handle_func(ldac_info->hLdacAbr);
     ldac_info->hLdacAbr = ldac_ABR_get_handle_func();
 
-    ret = ldac_ABR_Init_func(ldac_info->hLdacAbr,
-                        (unsigned int) pa_bytes_to_usec(ldac_info->q_write_block_size, &ldac_info->sample_spec) / 1000);
+    ret = ldac_ABR_Init_func(ldac_info->hLdacAbr, LDAC_ABR_INTERVAL_MS);
     if (ret != 0) {
         pa_log_warn("Failed to init ldacBT_ABR handle");
         goto fail1;

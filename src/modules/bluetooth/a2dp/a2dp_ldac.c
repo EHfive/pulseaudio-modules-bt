@@ -40,8 +40,6 @@
 
 #define streq(a, b) (!strcmp((a),(b)))
 
-#define AVDT_MEDIA_HDR_SIZE 12
-
 #define LDAC_ABR_THRESHOLD_CRITICAL 6
 #define LDAC_ABR_THRESHOLD_DANGEROUSTREND 4
 #define LDAC_ABR_THRESHOLD_SAFETY_FOR_HQSQ 2
@@ -204,7 +202,7 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         ldac_info->buf_index = 0;
         ldacBT_close_handle_func(ldac_info->hLdacBt);
         ret = ldacBT_init_handle_encode_func(ldac_info->hLdacBt,
-                                             (int) ldac_info->mtu + AVDT_MEDIA_HDR_SIZE,
+                                             (int) ldac_info->mtu,
                                              ldac_info->eqmid,
                                              ldac_info->channel_mode,
                                              ldac_info->pcm_fmt,
@@ -462,7 +460,7 @@ static void pa_ldac_setup_stream(void **codec_data) {
 
 
     ret = ldacBT_init_handle_encode_func(ldac_info->hLdacBt,
-                                    (int) ldac_info->mtu + AVDT_MEDIA_HDR_SIZE,
+                                    (int) ldac_info->mtu,
                                     ldac_info->eqmid,
                                     ldac_info->channel_mode,
                                     ldac_info->pcm_fmt,

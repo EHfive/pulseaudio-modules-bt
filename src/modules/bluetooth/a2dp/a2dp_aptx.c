@@ -149,7 +149,7 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
                uint32_t *timestamp, void **codec_data) {
     const struct rtp_header *header;
     void *p;
-    int ret;
+    int ret = 1;
     size_t i;
     AVPacket *pkt;
     size_t to_decode;
@@ -184,15 +184,20 @@ pa_dual_decode(const void *read_buf, size_t read_buf_size, void *write_buf, size
 
     *_decoded = 0;
 
-    ret = avcodec_send_packet_func(aptx_info->av_codec_ctx, pkt);
-    if (PA_UNLIKELY(ret < 0)) {
-        pa_log_debug("Error submitting the packet to the decoder");
-        goto done;
-    }
-    ret = avcodec_receive_frame_func(aptx_info->av_codec_ctx, av_frame);
-    if (PA_UNLIKELY(ret < 0)) {
-        pa_log_debug("Error during decoding");
-        goto done;
+    while(ret){
+        ret = avcodec_send_packet_func(aptx_info->av_codec_ctx, pkt);
+        if (PA_UNLIKELY(ret == AVERROR(EINVAL))) {
+            avcodec_flush_buffers_func(aptx_info->av_codec_ctx);
+            continue;
+        } else if (PA_UNLIKELY(ret < 0 && ret != AVERROR(EAGAIN))) {
+            pa_log_debug("Error submitting the packet to the decoder");
+            goto done;
+        }
+        ret = avcodec_receive_frame_func(aptx_info->av_codec_ctx, av_frame);
+        if (PA_UNLIKELY(ret < 0)) {
+            pa_log_debug("Error during decoding");
+            goto done;
+        }
     }
 
     *_decoded = aptx_info->aptx_frame_size * av_frame->nb_samples / 4;

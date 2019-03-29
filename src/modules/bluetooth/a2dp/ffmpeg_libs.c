@@ -44,6 +44,7 @@ static const char *avcodec_send_packet_func_name = "avcodec_send_packet";
 static const char *avcodec_receive_frame_func_name = "avcodec_receive_frame";
 static const char *avcodec_send_frame_func_name = "avcodec_send_frame";
 static const char *avcodec_receive_packet_func_name = "avcodec_receive_packet";
+static const char *avcodec_flush_buffers_func_name = "avcodec_flush_buffers";
 static const char *avcodec_alloc_context3_func_name = "avcodec_alloc_context3";
 static const char *avcodec_free_context_func_name = "avcodec_free_context";
 static const char *avcodec_open2_func_name = "avcodec_open2";
@@ -56,6 +57,7 @@ avcodec_send_packet_func_t avcodec_send_packet_func;
 avcodec_receive_frame_func_t avcodec_receive_frame_func;
 avcodec_send_frame_func_t avcodec_send_frame_func;
 avcodec_receive_packet_func_t avcodec_receive_packet_func;
+avcodec_flush_buffers_func_t avcodec_flush_buffers_func;
 avcodec_alloc_context3_func_t avcodec_alloc_context3_func;
 avcodec_free_context_func_t avcodec_free_context_func;
 avcodec_open2_func_t avcodec_open2_func;
@@ -95,6 +97,7 @@ static void libavcodec_unload() {
     avcodec_receive_frame_func = NULL;
     avcodec_send_frame_func = NULL;
     avcodec_receive_packet_func = NULL;
+    avcodec_flush_buffers_func = NULL;
     avcodec_alloc_context3_func = NULL;
     avcodec_free_context_func = NULL;
     avcodec_open2_func = NULL;
@@ -135,6 +138,9 @@ static bool libavcodec_load() {
         return false;
     avcodec_receive_packet_func = load_func(libavcodec_h, avcodec_receive_packet_func_name);
     if (avcodec_receive_packet_func == NULL)
+        return false;
+    avcodec_flush_buffers_func = load_func(libavcodec_h, avcodec_flush_buffers_func_name);
+    if (avcodec_flush_buffers_func == NULL)
         return false;
     avcodec_alloc_context3_func = load_func(libavcodec_h, avcodec_alloc_context3_func_name);
     if (avcodec_alloc_context3_func == NULL)

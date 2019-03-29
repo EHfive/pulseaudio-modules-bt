@@ -41,6 +41,8 @@ typedef int (*avcodec_send_frame_func_t)(AVCodecContext *avctx, const AVFrame *f
 
 typedef int (*avcodec_receive_packet_func_t)(AVCodecContext *avctx, AVPacket *avpkt);
 
+typedef void (*avcodec_flush_buffers_func_t)(AVCodecContext *avctx);
+
 typedef AVCodecContext *(*avcodec_alloc_context3_func_t)(const AVCodec *codec);
 
 typedef void (*avcodec_free_context_func_t)(AVCodecContext **avctx);
@@ -56,6 +58,7 @@ extern avcodec_send_packet_func_t avcodec_send_packet_func;
 extern avcodec_receive_frame_func_t avcodec_receive_frame_func;
 extern avcodec_send_frame_func_t avcodec_send_frame_func;
 extern avcodec_receive_packet_func_t avcodec_receive_packet_func;
+extern avcodec_flush_buffers_func_t avcodec_flush_buffers_func;
 extern avcodec_alloc_context3_func_t avcodec_alloc_context3_func;
 extern avcodec_free_context_func_t avcodec_free_context_func;
 extern avcodec_open2_func_t avcodec_open2_func;

@@ -1455,7 +1455,8 @@ static void thread_func(void *userdata) {
                     /* A new block needs to be sent. */
                     if (audio_sent <= time_passed) {
                         size_t bytes_to_send = pa_usec_to_bytes(time_passed - audio_sent, &u->sample_spec);
-
+                        uint64_t skip_bytes;
+                        bool flag = false;
                         if (u->transport->a2dp_source && u->transport->a2dp_source->set_tx_length){
                             u->transport->a2dp_source->set_tx_length(bytes_to_send, &u->a2dp_info.a2dp_source_data);
                             u->transport->a2dp_source->get_block_size(u->write_link_mtu, &u->write_block_size, &u->a2dp_info.a2dp_source_data);
@@ -1465,14 +1466,20 @@ static void thread_func(void *userdata) {
                          * the socket has not been accepting data fast enough (could be due to
                          * hiccups in the wireless transmission). We need to discard everything
                          * older than two block sizes to keep the latency from growing. */
-                        if (bytes_to_send > 2 * u->write_block_size) {
-                            uint64_t skip_bytes;
+                        if (u->transport->a2dp_source && (flag = u->transport->a2dp_source->handle_skipping)) {
+                            skip_bytes = u->transport->a2dp_source->handle_skipping(bytes_to_send,
+                                                                                    &u->a2dp_info.a2dp_source_data);
+                        } else
+                            skip_bytes = pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % u->write_block_size),
+                                                        &u->sample_spec);
+
+                        if ((flag && skip_bytes > 0) || (!flag && bytes_to_send > 2 * u->write_block_size)) {
+
                             pa_memchunk tmp;
                             size_t mempool_max_block_size = pa_mempool_block_size_max(u->core->mempool);
                             pa_usec_t skip_usec;
 
-                            skip_bytes = pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % u->write_block_size),
-                                                        &u->sample_spec);
+
                             skip_usec = pa_bytes_to_usec(skip_bytes, &u->sample_spec);
 
                             pa_log_debug("Skipping %llu us (= %llu bytes) in audio stream",

@@ -218,9 +218,9 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         ldac_ABR_Proc_func(ldac_info->hLdacBt, ldac_info->hLdacAbr,
                            (unsigned int) (ldac_info->tx_length / ldac_info->q_write_block_size),
                            (unsigned int) ldac_info->enable_abr);
-        ldac_info->tx_length = 0;
         ldac_info->read_bytes = 0;
     }
+    ldac_info->tx_length = 0;
 
     ldac_info->buf = write_buf;
 
@@ -500,7 +500,7 @@ fail1:
 static void pa_ldac_set_tx_length(size_t len, void **codec_data) {
     ldac_info_t *ldac_info = *codec_data;
     pa_assert(ldac_info);
-    ldac_info->tx_length += len;
+    ldac_info->tx_length += PA_MAX(ldac_info->tx_length, len);
 };
 
 static void pa_ldac_free(void **codec_data) {

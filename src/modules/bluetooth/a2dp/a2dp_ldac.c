@@ -442,7 +442,8 @@ static void pa_ldac_get_block_size(size_t write_link_mtu, size_t *write_block_si
 
     ldac_info->q_write_block_size = ((write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
                                      / ldac_info->ldac_frame_size * ldac_info->pcm_read_size);
-    *write_block_size = ldac_info->q_write_block_size * ldac_info->abr_t3;
+    *write_block_size = ldac_info->enable_abr ? ldac_info->q_write_block_size * ldac_info->abr_t3
+                                              : ldac_info->q_write_block_size;
 };
 
 
@@ -500,10 +501,15 @@ fail1:
 
 static size_t pa_ldac_handle_skipping(size_t bytes_to_send, void **codec_data) {
     ldac_info_t *info = *codec_data;
+    size_t skip_bytes;
     pa_assert(info);
-    if (bytes_to_send / info->q_write_block_size > info->abr_t3)
-        return pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % info->q_write_block_size),
-                              &info->sample_spec);
+    skip_bytes = pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % info->q_write_block_size),
+                                &info->sample_spec);
+    if(!info->enable_abr){
+        if(bytes_to_send > 2 * info->q_write_block_size)
+            return skip_bytes;
+    } else if (bytes_to_send / info->q_write_block_size > info->abr_t3)
+        return skip_bytes;
     return 0;
 }
 

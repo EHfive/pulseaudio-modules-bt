@@ -30,6 +30,7 @@
 
 #include <pulse/xmalloc.h>
 #include <pulsecore/once.h>
+#include <pulsecore/sample-util.h>
 
 #include <ldacBT.h>
 #include <ldacBT_abr.h>
@@ -218,9 +219,9 @@ pa_ldac_encode(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_
         ldac_ABR_Proc_func(ldac_info->hLdacBt, ldac_info->hLdacAbr,
                            (unsigned int) (ldac_info->tx_length / ldac_info->q_write_block_size),
                            (unsigned int) ldac_info->enable_abr);
+        ldac_info->tx_length = 0;
         ldac_info->read_bytes = 0;
     }
-    ldac_info->tx_length = 0;
 
     ldac_info->buf = write_buf;
 
@@ -441,7 +442,7 @@ static void pa_ldac_get_block_size(size_t write_link_mtu, size_t *write_block_si
 
     ldac_info->q_write_block_size = ((write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
                                      / ldac_info->ldac_frame_size * ldac_info->pcm_read_size);
-    *write_block_size = LDACBT_MAX_LSU * pa_frame_size(&ldac_info->sample_spec);
+    *write_block_size = ldac_info->q_write_block_size * ldac_info->abr_t3;
 };
 
 
@@ -496,6 +497,15 @@ fail1:
     ldac_info->hLdacAbr = NULL;
     ldac_info->enable_abr = false;
 };
+
+static size_t pa_ldac_handle_skipping(size_t bytes_to_send, void **codec_data) {
+    ldac_info_t *info = *codec_data;
+    pa_assert(info);
+    if (bytes_to_send / info->q_write_block_size > info->abr_t3)
+        return pa_frame_align(bytes_to_send - ((bytes_to_send / 2) % info->q_write_block_size),
+                              &info->sample_spec);
+    return 0;
+}
 
 static void pa_ldac_set_tx_length(size_t len, void **codec_data) {
     ldac_info_t *ldac_info = *codec_data;
@@ -634,6 +644,7 @@ static pa_a2dp_source_t pa_ldac_source = {
         .config_transport = pa_ldac_config_transport,
         .get_block_size = pa_ldac_get_block_size,
         .setup_stream = pa_ldac_setup_stream,
+        .handle_skipping = pa_ldac_handle_skipping,
         .set_tx_length = pa_ldac_set_tx_length,
         .decrease_quality = NULL,
         .free = pa_ldac_free

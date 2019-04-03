@@ -434,6 +434,12 @@ pa_ldac_config_transport(pa_sample_spec default_sample_spec, const void *configu
 
 };
 
+static size_t pa_ldac_handle_update_buffer_size(void **codec_data) {
+    ldac_info_t *ldac_info = *codec_data;
+    pa_assert(ldac_info);
+    return ldac_info->q_write_block_size * ldac_info->abr_t3;
+}
+
 static void pa_ldac_get_block_size(size_t write_link_mtu, size_t *write_block_size, void **codec_data) {
     ldac_info_t *ldac_info = *codec_data;
     pa_assert(ldac_info);
@@ -442,8 +448,7 @@ static void pa_ldac_get_block_size(size_t write_link_mtu, size_t *write_block_si
 
     ldac_info->q_write_block_size = ((write_link_mtu - sizeof(struct rtp_header) - sizeof(struct rtp_payload))
                                      / ldac_info->ldac_frame_size * ldac_info->pcm_read_size);
-    *write_block_size = ldac_info->enable_abr ? ldac_info->q_write_block_size * ldac_info->abr_t3
-                                              : ldac_info->q_write_block_size;
+    *write_block_size = ldac_info->q_write_block_size;
 };
 
 
@@ -648,6 +653,7 @@ static pa_a2dp_source_t pa_ldac_source = {
         .update_user_config = pa_ldac_update_user_config,
         .encode = pa_ldac_encode,
         .config_transport = pa_ldac_config_transport,
+        .handle_update_buffer_size = pa_ldac_handle_update_buffer_size,
         .get_block_size = pa_ldac_get_block_size,
         .setup_stream = pa_ldac_setup_stream,
         .handle_skipping = pa_ldac_handle_skipping,

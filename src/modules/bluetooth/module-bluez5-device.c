@@ -616,9 +616,12 @@ static void update_buffer_size(struct userdata *u) {
          * there should at least be room for two chunks in the buffer. Generally, write_block_size
          * is larger than 512. If not, use the next multiple of write_block_size which is larger
          * than 1024. */
-        new_bufsize = 2 * u->write_block_size;
+        if (u->transport->a2dp_source && u->transport->a2dp_source->handle_update_buffer_size)
+            new_bufsize = (int) u->transport->a2dp_source->handle_update_buffer_size(&u->a2dp_info.a2dp_source_data);
+        else
+            new_bufsize = (int) (2 * u->write_block_size);
         if (new_bufsize < 1024)
-            new_bufsize = (1024 / u->write_block_size + 1) * u->write_block_size;
+            new_bufsize = (int) ((1024 / u->write_block_size + 1) * u->write_block_size);
 
         /* The kernel internally doubles the buffer size that was set by setsockopt and getsockopt
          * returns the doubled value. */

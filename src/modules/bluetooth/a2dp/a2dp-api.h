@@ -173,11 +173,16 @@ typedef struct pa_a2dp_source {
 
     void (*get_block_size)(size_t write_link_mtu, size_t *write_block_size, void **codec_data);
 
+    size_t (*handle_update_buffer_size)(void **codec_data);
+
     void (*setup_stream)(void **codec_data);
 
     /* Pass read_cb_data to pa_a2dp_source_read_cb, pa_a2dp_source_read_buf_free_cb */
     size_t (*encode)(uint32_t timestamp, void *write_buf, size_t write_buf_size, size_t *encoded,
                      void *read_cb_data, void **codec_data);
+
+    /* Optional, return size of bytes to skip */
+    size_t (*handle_skipping)(size_t bytes_to_send, void **codec_data);
 
     /* Optional */
     void (*set_tx_length)(size_t len, void **codec_data);

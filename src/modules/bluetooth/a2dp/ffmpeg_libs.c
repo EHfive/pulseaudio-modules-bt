@@ -34,7 +34,10 @@
 
 #include "ffmpeg_libs.h"
 
-static const char *AVCODEC_LIB_NAME = "libavcodec.so";
+static const char *AVCODEC_LIB_NAMES[] = {
+        "libavcodec.so.58",
+        "libavcodec.so"
+};
 
 static const char *avcodec_find_decoder_func_name = "avcodec_find_decoder";
 static const char *avcodec_find_encoder_func_name = "avcodec_find_encoder";
@@ -62,7 +65,10 @@ avcodec_alloc_context3_func_t avcodec_alloc_context3_func;
 avcodec_free_context_func_t avcodec_free_context_func;
 avcodec_open2_func_t avcodec_open2_func;
 
-static const char *AVUTIL_LIB_NAME = "libavutil.so";
+static const char *AVUTIL_LIB_NAMES[] = {
+        "libavutil.so.56",
+        "libavutil.so"
+};
 
 static const char *av_frame_alloc_func_name = "av_frame_alloc";
 static const char *av_frame_get_buffer_func_name = "av_frame_get_buffer";
@@ -107,53 +113,6 @@ static void libavcodec_unload() {
     }
 }
 
-static bool libavcodec_load() {
-    if (libavcodec_h)
-        return true;
-    libavcodec_h = dlopen(AVCODEC_LIB_NAME, RTLD_NOW);
-    if (libavcodec_h == NULL) {
-        pa_log_error("Cannot open libavcodec library: %s. %s", AVCODEC_LIB_NAME, dlerror());
-        return false;
-    }
-    avcodec_find_decoder_func = load_func(libavcodec_h, avcodec_find_decoder_func_name);
-    if (avcodec_find_decoder_func == NULL)
-        return false;
-    avcodec_find_encoder_func = load_func(libavcodec_h, avcodec_find_encoder_func_name);
-    if (avcodec_find_encoder_func == NULL)
-        return false;
-    av_packet_alloc_func = load_func(libavcodec_h, av_packet_alloc_func_name);
-    if (av_packet_alloc_func == NULL)
-        return false;
-    av_packet_free_func = load_func(libavcodec_h, av_packet_free_func_name);
-    if (av_packet_free_func == NULL)
-        return false;
-    avcodec_send_packet_func = load_func(libavcodec_h, avcodec_send_packet_func_name);
-    if (avcodec_send_packet_func == NULL)
-        return false;
-    avcodec_receive_frame_func = load_func(libavcodec_h, avcodec_receive_frame_func_name);
-    if (avcodec_receive_frame_func == NULL)
-        return false;
-    avcodec_send_frame_func = load_func(libavcodec_h, avcodec_send_frame_func_name);
-    if (avcodec_send_frame_func == NULL)
-        return false;
-    avcodec_receive_packet_func = load_func(libavcodec_h, avcodec_receive_packet_func_name);
-    if (avcodec_receive_packet_func == NULL)
-        return false;
-    avcodec_flush_buffers_func = load_func(libavcodec_h, avcodec_flush_buffers_func_name);
-    if (avcodec_flush_buffers_func == NULL)
-        return false;
-    avcodec_alloc_context3_func = load_func(libavcodec_h, avcodec_alloc_context3_func_name);
-    if (avcodec_alloc_context3_func == NULL)
-        return false;
-    avcodec_free_context_func = load_func(libavcodec_h, avcodec_free_context_func_name);
-    if (avcodec_free_context_func == NULL)
-        return false;
-    avcodec_open2_func = load_func(libavcodec_h, avcodec_open2_func_name);
-    if (avcodec_open2_func == NULL)
-        return false;
-    return true;
-}
-
 static void libavutil_unload() {
     av_frame_alloc_func = NULL;
     av_frame_get_buffer_func = NULL;
@@ -165,28 +124,82 @@ static void libavutil_unload() {
     }
 }
 
+static bool libavcodec_load() {
+    if (libavcodec_h)
+        return true;
+    for (int i = 0; i < PA_ELEMENTSOF(AVCODEC_LIB_NAMES); ++i) {
+        libavutil_unload();
+        libavcodec_h = dlopen(AVCODEC_LIB_NAMES[i], RTLD_NOW);
+        if (libavcodec_h == NULL) {
+            pa_log_warn("Cannot open libavcodec library: %s. %s", AVCODEC_LIB_NAMES[i], dlerror());
+            continue;
+        }
+        avcodec_find_decoder_func = load_func(libavcodec_h, avcodec_find_decoder_func_name);
+        if (avcodec_find_decoder_func == NULL)
+            continue;
+        avcodec_find_encoder_func = load_func(libavcodec_h, avcodec_find_encoder_func_name);
+        if (avcodec_find_encoder_func == NULL)
+            continue;
+        av_packet_alloc_func = load_func(libavcodec_h, av_packet_alloc_func_name);
+        if (av_packet_alloc_func == NULL)
+            continue;
+        av_packet_free_func = load_func(libavcodec_h, av_packet_free_func_name);
+        if (av_packet_free_func == NULL)
+            continue;
+        avcodec_send_packet_func = load_func(libavcodec_h, avcodec_send_packet_func_name);
+        if (avcodec_send_packet_func == NULL)
+            continue;
+        avcodec_receive_frame_func = load_func(libavcodec_h, avcodec_receive_frame_func_name);
+        if (avcodec_receive_frame_func == NULL)
+            continue;
+        avcodec_send_frame_func = load_func(libavcodec_h, avcodec_send_frame_func_name);
+        if (avcodec_send_frame_func == NULL)
+            continue;
+        avcodec_receive_packet_func = load_func(libavcodec_h, avcodec_receive_packet_func_name);
+        if (avcodec_receive_packet_func == NULL)
+            continue;
+        avcodec_flush_buffers_func = load_func(libavcodec_h, avcodec_flush_buffers_func_name);
+        if (avcodec_flush_buffers_func == NULL)
+            continue;
+        avcodec_alloc_context3_func = load_func(libavcodec_h, avcodec_alloc_context3_func_name);
+        if (avcodec_alloc_context3_func == NULL)
+            continue;
+        avcodec_free_context_func = load_func(libavcodec_h, avcodec_free_context_func_name);
+        if (avcodec_free_context_func == NULL)
+            continue;
+        avcodec_open2_func = load_func(libavcodec_h, avcodec_open2_func_name);
+        if (avcodec_open2_func == NULL)
+            continue;
+        return true;
+    }
+    return false;
+}
+
 static bool libavutil_load() {
     if (libavutil_h)
         return true;
-    libavutil_h = dlopen(AVUTIL_LIB_NAME, RTLD_NOW);
-    if (libavutil_h == NULL) {
-        pa_log_error("Cannot open libavutil library: %s. %s", AVUTIL_LIB_NAME, dlerror());
-        return false;
+    for (int i = 0; i < PA_ELEMENTSOF(AVUTIL_LIB_NAMES); ++i) {
+        libavutil_h = dlopen(AVUTIL_LIB_NAMES[i], RTLD_NOW);
+        if (libavutil_h == NULL) {
+            pa_log_warn("Cannot open libavutil library: %s. %s", AVUTIL_LIB_NAMES[i], dlerror());
+            continue;
+        }
+        av_frame_alloc_func = load_func(libavutil_h, av_frame_alloc_func_name);
+        if (av_frame_alloc_func == NULL)
+            continue;
+        av_frame_get_buffer_func = load_func(libavutil_h, av_frame_get_buffer_func_name);
+        if (av_frame_get_buffer_func == NULL)
+            continue;
+        av_frame_make_writable_func = load_func(libavutil_h, av_frame_make_writable_func_name);
+        if (av_frame_make_writable_func == NULL)
+            continue;
+        av_frame_free_func = load_func(libavutil_h, av_frame_free_func_name);
+        if (av_frame_free_func == NULL)
+            continue;
+        return true;
     }
-    av_frame_alloc_func = load_func(libavutil_h, av_frame_alloc_func_name);
-    if (av_frame_alloc_func == NULL)
-        return false;
-    av_frame_get_buffer_func = load_func(libavutil_h, av_frame_get_buffer_func_name);
-    if (av_frame_get_buffer_func == NULL)
-        return false;
-    av_frame_make_writable_func = load_func(libavutil_h, av_frame_make_writable_func_name);
-    if (av_frame_make_writable_func == NULL)
-        return false;
-    av_frame_free_func = load_func(libavutil_h, av_frame_free_func_name);
-    if (av_frame_free_func == NULL)
-        return false;
 
-    return true;
+    return false;
 }
 
 bool ffmpeg_libs_load() {

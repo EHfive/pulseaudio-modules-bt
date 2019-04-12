@@ -182,11 +182,11 @@ static bool device_supports_profile(pa_bluetooth_device *device, pa_bluetooth_pr
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_A2DP_SINK);
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_A2DP_SOURCE);
-        case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+        case PA_BLUETOOTH_PROFILE_HSP_HS:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS)
                 || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS_ALT)
                 || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_HF);
-        case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+        case PA_BLUETOOTH_PROFILE_HFP_AG:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_AG)
                 || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_AG);
         case PA_BLUETOOTH_PROFILE_OFF:
@@ -1339,7 +1339,7 @@ void pa_bluetooth_discovery_set_ofono_running(pa_bluetooth_discovery *y, bool is
         pa_bluetooth_device *d;
 
         PA_HASHMAP_FOREACH(d, y->devices, state) {
-            if (device_supports_profile(d, PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY)) {
+            if (device_supports_profile(d, PA_BLUETOOTH_PROFILE_HFP_AG)) {
                 DBusMessage *m;
 
                 pa_assert_se(m = dbus_message_new_method_call(BLUEZ_SERVICE, d->path, "org.bluez.Device1", "Disconnect"));
@@ -1586,9 +1586,9 @@ const char *pa_bluetooth_profile_to_string(pa_bluetooth_profile_t profile) {
             return "a2dp_sink";
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
             return "a2dp_source";
-        case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+        case PA_BLUETOOTH_PROFILE_HSP_HS:
             return "headset_head_unit";
-        case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+        case PA_BLUETOOTH_PROFILE_HFP_AG:
             return "headset_audio_gateway";
         case PA_BLUETOOTH_PROFILE_OFF:
             return "off";

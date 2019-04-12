@@ -451,7 +451,7 @@ static void set_speaker_gain(pa_bluetooth_transport *t, uint16_t gain) {
     /* If we are in the AG role, we send a command to the head set to change
      * the speaker gain. In the HS role, source and sink are swapped, so
      * in this case we notify the AG that the microphone gain has changed */
-    if (t->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT) {
+    if (t->profile == PA_BLUETOOTH_PROFILE_HSP_HS) {
         len = sprintf(buf, "\r\n+VGS=%d\r\n", gain);
         pa_log_debug("RFCOMM >> +VGS=%d", gain);
     } else {
@@ -478,7 +478,7 @@ static void set_microphone_gain(pa_bluetooth_transport *t, uint16_t gain) {
     /* If we are in the AG role, we send a command to the head set to change
      * the microphone gain. In the HS role, source and sink are swapped, so
      * in this case we notify the AG that the speaker gain has changed */
-    if (t->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT) {
+    if (t->profile == PA_BLUETOOTH_PROFILE_HSP_HS) {
         len = sprintf(buf, "\r\n+VGM=%d\r\n", gain);
         pa_log_debug("RFCOMM >> +VGM=%d", gain);
     } else {
@@ -511,9 +511,9 @@ static DBusMessage *profile_new_connection(DBusConnection *conn, DBusMessage *m,
 
     handler = dbus_message_get_path(m);
     if (pa_streq(handler, HSP_AG_PROFILE)) {
-        p = PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT;
+        p = PA_BLUETOOTH_PROFILE_HSP_HS;
     } else if (pa_streq(handler, HSP_HS_PROFILE)) {
-        p = PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY;
+        p = PA_BLUETOOTH_PROFILE_HFP_AG;
     } else {
         pa_log_error("Invalid handler");
         goto fail;
@@ -628,11 +628,11 @@ static void profile_init(pa_bluetooth_backend *b, pa_bluetooth_profile_t profile
     pa_assert(b);
 
     switch (profile) {
-        case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+        case PA_BLUETOOTH_PROFILE_HSP_HS:
             object_name = HSP_AG_PROFILE;
             uuid = PA_BLUETOOTH_UUID_HSP_AG;
             break;
-        case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+        case PA_BLUETOOTH_PROFILE_HFP_AG:
             object_name = HSP_HS_PROFILE;
             uuid = PA_BLUETOOTH_UUID_HSP_HS;
             break;
@@ -649,10 +649,10 @@ static void profile_done(pa_bluetooth_backend *b, pa_bluetooth_profile_t profile
     pa_assert(b);
 
     switch (profile) {
-        case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+        case PA_BLUETOOTH_PROFILE_HSP_HS:
             dbus_connection_unregister_object_path(pa_dbus_connection_get(b->connection), HSP_AG_PROFILE);
             break;
-        case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+        case PA_BLUETOOTH_PROFILE_HFP_AG:
             dbus_connection_unregister_object_path(pa_dbus_connection_get(b->connection), HSP_HS_PROFILE);
             break;
         default:
@@ -667,9 +667,9 @@ void pa_bluetooth_native_backend_enable_hs_role(pa_bluetooth_backend *native_bac
        return;
 
    if (enable_hs_role)
-       profile_init(native_backend, PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
+       profile_init(native_backend, PA_BLUETOOTH_PROFILE_HFP_AG);
    else
-       profile_done(native_backend, PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
+       profile_done(native_backend, PA_BLUETOOTH_PROFILE_HFP_AG);
 
    native_backend->enable_hs_role = enable_hs_role;
 }
@@ -695,8 +695,8 @@ pa_bluetooth_backend *pa_bluetooth_native_backend_new(pa_core *c, pa_bluetooth_d
     backend->enable_hs_role = enable_hs_role;
 
     if (enable_hs_role)
-       profile_init(backend, PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
-    profile_init(backend, PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT);
+       profile_init(backend, PA_BLUETOOTH_PROFILE_HFP_AG);
+    profile_init(backend, PA_BLUETOOTH_PROFILE_HSP_HS);
 
     return backend;
 }
@@ -707,8 +707,8 @@ void pa_bluetooth_native_backend_free(pa_bluetooth_backend *backend) {
     pa_dbus_free_pending_list(&backend->pending);
 
     if (backend->enable_hs_role)
-       profile_done(backend, PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
-    profile_done(backend, PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT);
+       profile_done(backend, PA_BLUETOOTH_PROFILE_HFP_AG);
+    profile_done(backend, PA_BLUETOOTH_PROFILE_HSP_HS);
 
     pa_dbus_connection_unref(backend->connection);
 

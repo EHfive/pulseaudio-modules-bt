@@ -287,7 +287,7 @@ static void hf_audio_agent_card_found(pa_bluetooth_backend *backend, const char 
     const char *key, *value;
     struct hf_audio_card *card;
     pa_bluetooth_device *d;
-    pa_bluetooth_profile_t p = PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY;
+    pa_bluetooth_profile_t p = PA_BLUETOOTH_PROFILE_HFP_AG;
 
     pa_assert(backend);
     pa_assert(path);
@@ -321,7 +321,7 @@ static void hf_audio_agent_card_found(pa_bluetooth_backend *backend, const char 
             card->local_address = pa_xstrdup(value);
         } else if (pa_streq(key, "Type")) {
             if (pa_streq(value, "gateway"))
-                p = PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT;
+                p = PA_BLUETOOTH_PROFILE_HSP_HS;
         }
 
         pa_log_debug("%s: %s", key, value);

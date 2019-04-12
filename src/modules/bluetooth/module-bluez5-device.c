@@ -261,8 +261,8 @@ static int sco_process_render(struct userdata *u) {
     int saved_errno;
 
     pa_assert(u);
-    pa_assert(u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT ||
-                u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
+    pa_assert(u->profile == PA_BLUETOOTH_PROFILE_HSP_HS ||
+                u->profile == PA_BLUETOOTH_PROFILE_HFP_AG);
     pa_assert(u->sink);
 
     pa_sink_render_full(u->sink, u->write_block_size, &memchunk);
@@ -331,8 +331,8 @@ static int sco_process_push(struct userdata *u) {
     pa_usec_t tstamp = 0;
 
     pa_assert(u);
-    pa_assert(u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT ||
-                u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY);
+    pa_assert(u->profile == PA_BLUETOOTH_PROFILE_HSP_HS ||
+                u->profile == PA_BLUETOOTH_PROFILE_HFP_AG);
     pa_assert(u->source);
     pa_assert(u->read_smoother);
 
@@ -725,7 +725,7 @@ static void transport_release(struct userdata *u) {
 
 /* Run from I/O thread */
 static void transport_config_mtu(struct userdata *u) {
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY) {
+    if (u->profile == PA_BLUETOOTH_PROFILE_HSP_HS || u->profile == PA_BLUETOOTH_PROFILE_HFP_AG) {
         u->read_block_size = u->read_link_mtu;
         u->write_block_size = u->write_link_mtu;
 
@@ -939,7 +939,7 @@ static void source_set_volume_cb(pa_source *s) {
     pa_cvolume_set(&s->real_volume, u->sample_spec.channels, volume);
 
     /* Set soft volume when in headset role */
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY)
+    if (u->profile == PA_BLUETOOTH_PROFILE_HFP_AG)
         pa_cvolume_set(&s->soft_volume, u->sample_spec.channels, volume);
 
     /* If we are in the AG role, we send a command to the head set to change
@@ -962,7 +962,7 @@ static int add_source(struct userdata *u) {
     data.namereg_fail = false;
     pa_proplist_sets(data.proplist, "bluetooth.protocol", pa_bluetooth_profile_to_string(u->profile));
     pa_source_new_data_set_sample_spec(&data, &u->sample_spec);
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT)
+    if (u->profile == PA_BLUETOOTH_PROFILE_HSP_HS)
         pa_proplist_sets(data.proplist, PA_PROP_DEVICE_INTENDED_ROLES, "phone");
 
     connect_ports(u, &data, PA_DIRECTION_INPUT);
@@ -970,10 +970,10 @@ static int add_source(struct userdata *u) {
     if (!u->transport_acquired)
         switch (u->profile) {
             case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
-            case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+            case PA_BLUETOOTH_PROFILE_HFP_AG:
                 data.suspend_cause = PA_SUSPEND_USER;
                 break;
-            case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+            case PA_BLUETOOTH_PROFILE_HSP_HS:
                 /* u->stream_fd contains the error returned by the last transport_acquire()
                  * EAGAIN means we are waiting for a NewConnection signal */
                 if (u->stream_fd == -EAGAIN)
@@ -1000,7 +1000,7 @@ static int add_source(struct userdata *u) {
     u->source->parent.process_msg = source_process_msg;
     u->source->set_state_in_io_thread = source_set_state_in_io_thread_cb;
 
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY) {
+    if (u->profile == PA_BLUETOOTH_PROFILE_HSP_HS || u->profile == PA_BLUETOOTH_PROFILE_HFP_AG) {
         pa_source_set_set_volume_callback(u->source, source_set_volume_cb);
         u->source->n_volume_steps = 16;
     }
@@ -1115,7 +1115,7 @@ static void sink_set_volume_cb(pa_sink *s) {
     pa_cvolume_set(&s->real_volume, u->sample_spec.channels, volume);
 
     /* Set soft volume when in headset role */
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY)
+    if (u->profile == PA_BLUETOOTH_PROFILE_HFP_AG)
         pa_cvolume_set(&s->soft_volume, u->sample_spec.channels, volume);
 
     /* If we are in the AG role, we send a command to the head set to change
@@ -1138,17 +1138,17 @@ static int add_sink(struct userdata *u) {
     data.namereg_fail = false;
     pa_proplist_sets(data.proplist, "bluetooth.protocol", pa_bluetooth_profile_to_string(u->profile));
     pa_sink_new_data_set_sample_spec(&data, &u->sample_spec);
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT)
+    if (u->profile == PA_BLUETOOTH_PROFILE_HSP_HS)
         pa_proplist_sets(data.proplist, PA_PROP_DEVICE_INTENDED_ROLES, "phone");
 
     connect_ports(u, &data, PA_DIRECTION_OUTPUT);
 
     if (!u->transport_acquired)
         switch (u->profile) {
-            case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+            case PA_BLUETOOTH_PROFILE_HFP_AG:
                 data.suspend_cause = PA_SUSPEND_USER;
                 break;
-            case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+            case PA_BLUETOOTH_PROFILE_HSP_HS:
                 /* u->stream_fd contains the error returned by the last transport_acquire()
                  * EAGAIN means we are waiting for a NewConnection signal */
                 if (u->stream_fd == -EAGAIN)
@@ -1178,7 +1178,7 @@ static int add_sink(struct userdata *u) {
     u->sink->parent.process_msg = sink_process_msg;
     u->sink->set_state_in_io_thread = sink_set_state_in_io_thread_cb;
 
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY) {
+    if (u->profile == PA_BLUETOOTH_PROFILE_HSP_HS || u->profile == PA_BLUETOOTH_PROFILE_HFP_AG) {
         pa_sink_set_set_volume_callback(u->sink, sink_set_volume_cb);
         u->sink->n_volume_steps = 16;
     }
@@ -1187,7 +1187,7 @@ static int add_sink(struct userdata *u) {
 
 /* Run from main thread */
 static void transport_config(struct userdata *u) {
-    if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY) {
+    if (u->profile == PA_BLUETOOTH_PROFILE_HSP_HS || u->profile == PA_BLUETOOTH_PROFILE_HFP_AG) {
         u->sample_spec.format = PA_SAMPLE_S16LE;
         u->sample_spec.channels = 1;
         u->sample_spec.rate = 8000;
@@ -1253,7 +1253,7 @@ static int setup_transport(struct userdata *u) {
 
     u->transport = t;
 
-    if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SOURCE || u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY)
+    if (u->profile == PA_BLUETOOTH_PROFILE_A2DP_SOURCE || u->profile == PA_BLUETOOTH_PROFILE_HFP_AG)
         transport_acquire(u, true); /* In case of error, the sink/sources will be created suspended */
     else {
         int transport_error;
@@ -1273,8 +1273,8 @@ static pa_direction_t get_profile_direction(pa_bluetooth_profile_t p) {
     static const pa_direction_t profile_direction[] = {
         [PA_BLUETOOTH_PROFILE_A2DP_SINK] = PA_DIRECTION_OUTPUT,
         [PA_BLUETOOTH_PROFILE_A2DP_SOURCE] = PA_DIRECTION_INPUT,
-        [PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
-        [PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
+        [PA_BLUETOOTH_PROFILE_HSP_HS] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
+        [PA_BLUETOOTH_PROFILE_HFP_AG] = PA_DIRECTION_INPUT | PA_DIRECTION_OUTPUT,
         [PA_BLUETOOTH_PROFILE_OFF] = 0
     };
 
@@ -1608,7 +1608,7 @@ static int start_thread(struct userdata *u) {
 
         /* If we are in the headset role, the sink should not become default
          * unless there is no other sound device available. */
-        if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY)
+        if (u->profile == PA_BLUETOOTH_PROFILE_HFP_AG)
             u->sink->priority = 1500;
 
         pa_sink_put(u->sink);
@@ -1624,7 +1624,7 @@ static int start_thread(struct userdata *u) {
         /* If we are in the headset role or the device is an a2dp source,
          * the source should not become default unless there is no other
          * sound device available. */
-        if (u->profile == PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY || u->profile == PA_BLUETOOTH_PROFILE_A2DP_SOURCE)
+        if (u->profile == PA_BLUETOOTH_PROFILE_HFP_AG || u->profile == PA_BLUETOOTH_PROFILE_A2DP_SOURCE)
             u->source->priority = 1500;
 
         pa_source_put(u->source);
@@ -1908,7 +1908,7 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         p_info = PA_CARD_PROFILE_DATA(cp);
         break;
 
-    case PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT:
+    case PA_BLUETOOTH_PROFILE_HSP_HS:
         cp = pa_card_profile_new(name, _("Headset Head Unit (HSP/HFP)"), sizeof(pa_bluetooth_profile_info_t));
         cp->priority = 30;
         cp->n_sinks = 1;
@@ -1921,7 +1921,7 @@ static pa_card_profile *create_card_profile(struct userdata *u, pa_bluetooth_pro
         p_info = PA_CARD_PROFILE_DATA(cp);
         break;
 
-    case PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY:
+    case PA_BLUETOOTH_PROFILE_HFP_AG:
         cp = pa_card_profile_new(name, _("Headset Audio Gateway (HSP/HFP)"), sizeof(pa_bluetooth_profile_info_t));
         cp->priority = 10;
         cp->n_sinks = 1;
@@ -2034,9 +2034,9 @@ static int uuid_to_profile(const char *uuid, pa_bluetooth_profile_t *_r) {
     else if (pa_streq(uuid, PA_BLUETOOTH_UUID_A2DP_SOURCE))
         *_r = PA_BLUETOOTH_PROFILE_A2DP_SOURCE;
     else if (pa_bluetooth_uuid_is_hsp_hs(uuid) || pa_streq(uuid, PA_BLUETOOTH_UUID_HFP_HF))
-        *_r = PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT;
+        *_r = PA_BLUETOOTH_PROFILE_HSP_HS;
     else if (pa_streq(uuid, PA_BLUETOOTH_UUID_HSP_AG) || pa_streq(uuid, PA_BLUETOOTH_UUID_HFP_AG))
-        *_r = PA_BLUETOOTH_PROFILE_HEADSET_AUDIO_GATEWAY;
+        *_r = PA_BLUETOOTH_PROFILE_HFP_AG;
     else
         return -PA_ERR_INVALID;
 
@@ -2309,7 +2309,7 @@ static pa_hook_result_t transport_speaker_gain_changed_cb(pa_bluetooth_discovery
         volume++;
 
     pa_cvolume_set(&v, u->sample_spec.channels, volume);
-    if (t->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT)
+    if (t->profile == PA_BLUETOOTH_PROFILE_HSP_HS)
         pa_sink_volume_changed(u->sink, &v);
     else
         pa_sink_set_volume(u->sink, &v, true, true);
@@ -2337,7 +2337,7 @@ static pa_hook_result_t transport_microphone_gain_changed_cb(pa_bluetooth_discov
 
     pa_cvolume_set(&v, u->sample_spec.channels, volume);
 
-    if (t->profile == PA_BLUETOOTH_PROFILE_HEADSET_HEAD_UNIT)
+    if (t->profile == PA_BLUETOOTH_PROFILE_HSP_HS)
         pa_source_volume_changed(u->source, &v);
     else
         pa_source_set_volume(u->source, &v, true, true);

@@ -55,6 +55,43 @@ struct transport_data {
     pa_mainloop_api *mainloop;
 };
 
+struct hfp_config {
+    uint32_t capabilities;
+    int state;
+};
+
+/*
+ * the separate hansfree headset (HF) and Audio Gateway (AG) features
+ */
+enum hfp_hf_features {
+    HFP_HF_EC_NR = 0,
+    HFP_HF_CALL_WAITING = 1,
+    HFP_HF_CLI = 2,
+    HFP_HF_VR = 3,
+    HFP_HF_RVOL = 4,
+    HFP_HF_ESTATUS = 5,
+    HFP_HF_ECALL = 6,
+    HFP_HF_CODECS = 7,
+};
+
+enum hfp_ag_features {
+    HFP_AG_THREE_WAY = 0,
+    HFP_AG_EC_NR = 1,
+    HFP_AG_VR = 2,
+    HFP_AG_RING = 3,
+    HFP_AG_NUM_TAG = 4,
+    HFP_AG_REJECT = 5,
+    HFP_AG_ESTATUS = 6,
+    HFP_AG_ECALL = 7,
+    HFP_AG_EERR = 8,
+    HFP_AG_CODECS = 9,
+};
+
+/* gateway features we support, which is as little as we can get away with */
+static uint32_t hfp_features =
+    /* HFP 1.6 requires this */
+    (1 << HFP_AG_ESTATUS );
+
 #define BLUEZ_SERVICE "org.bluez"
 #define BLUEZ_MEDIA_TRANSPORT_INTERFACE BLUEZ_SERVICE ".MediaTransport1"
 
@@ -109,6 +146,27 @@ static pa_dbus_pending* send_and_add_to_pending(pa_bluetooth_backend *backend, D
     dbus_pending_call_set_notify(call, func, p, NULL);
 
     return p;
+}
+
+static void rfcomm_write(int fd, const char *str)
+{
+    size_t len;
+    char buf[512];
+
+    pa_log_debug("RFCOMM >> %s", str);
+    sprintf(buf, "\r\n%s\r\n", str);
+    len = write(fd, buf, strlen(buf));
+
+    if (len != strlen(buf))
+        pa_log_error("RFCOMM write error: %s", pa_cstrerror(errno));
+}
+
+static void hfp_send_features(int fd)
+{
+    char buf[512];
+
+    sprintf(buf, "+BRSF: %d", hfp_features);
+    rfcomm_write(fd, buf);
 }
 
 static int sco_do_connect(pa_bluetooth_transport *t) {
@@ -354,6 +412,61 @@ static void register_profile(pa_bluetooth_backend *b, const char *profile, const
     send_and_add_to_pending(b, m, register_profile_reply, pa_xstrdup(profile));
 }
 
+static void transport_put(pa_bluetooth_transport *t)
+{
+    pa_bluetooth_transport_put(t);
+
+    pa_log_debug("Transport %s available for profile %s", t->path, pa_bluetooth_profile_to_string(t->profile));
+}
+
+static bool hfp_rfcomm_handle(int fd, pa_bluetooth_transport *t, const char *buf)
+{
+    struct hfp_config *c = t->config;
+    int val;
+
+    /* stateful negotiation */
+    if (c->state == 0 && sscanf(buf, "AT+BRSF=%d", &val) == 1) {
+          c->capabilities = val;
+          pa_log_info("HFP capabilities returns 0x%x", val);
+          hfp_send_features(fd);
+          c->state = 1;
+          return true;
+    } else if (c->state == 1 && pa_startswith(buf, "AT+CIND=?")) {
+          /* we declare minimal no indicators */
+        rfcomm_write(fd, "+CIND: "
+                     /* many indicators can be supported, only call and
+                      * callheld are mandatory, so that's all we repy */
+                     "(\"call\",(0-1)),"
+                     "(\"callheld\",(0-2))");
+        c->state = 2;
+        return true;
+    } else if (c->state == 2 && pa_startswith(buf, "AT+CIND?")) {
+        rfcomm_write(fd, "+CIND: 0,0");
+        c->state = 3;
+        return true;
+    } else if ((c->state == 2 || c->state == 3) && pa_startswith(buf, "AT+CMER=")) {
+        rfcomm_write(fd, "\r\nOK\r\n");
+        c->state = 4;
+        transport_put(t);
+        return false;
+    }
+
+    /* if we get here, negotiation should be complete */
+    if (c->state != 4) {
+        pa_log_error("HFP negotiation failed in state %d with inbound %s\n",
+                     c->state, buf);
+        rfcomm_write(fd, "ERROR");
+        return false;
+    }
+
+    /*
+     * once we're fully connected, just reply OK to everything
+     * it will just be the headset sending the occasional status
+     * update, but we process only the ones we care about
+     */
+    return true;
+}
+
 static void rfcomm_io_callback(pa_mainloop_api *io, pa_io_event *e, int fd, pa_io_event_flags_t events, void *userdata) {
     pa_bluetooth_transport *t = userdata;
 
@@ -400,6 +513,8 @@ static void rfcomm_io_callback(pa_mainloop_api *io, pa_io_event *e, int fd, pa_i
             do_reply = true;
         } else if (sscanf(buf, "AT+CKPD=%d", &dummy) == 1) {
             do_reply = true;
+        } else if (t->config) { /* t->config is only non-null for hfp profile */
+            do_reply = hfp_rfcomm_handle(fd, t, buf);
         } else {
             do_reply = false;
         }
@@ -542,7 +657,9 @@ static DBusMessage *profile_new_connection(DBusConnection *conn, DBusMessage *m,
     sender = dbus_message_get_sender(m);
 
     pathfd = pa_sprintf_malloc ("%s/fd%d", path, fd);
-    t = pa_bluetooth_transport_new(d, sender, pathfd, p, NULL, 0);
+    t = pa_bluetooth_transport_new(d, sender, pathfd, p, NULL,
+                                   p == PA_BLUETOOTH_PROFILE_HFP_HF ?
+                                   sizeof(struct hfp_config) : 0);
     pa_xfree(pathfd);
 
     t->acquire = sco_acquire_cb;
@@ -560,9 +677,8 @@ static DBusMessage *profile_new_connection(DBusConnection *conn, DBusMessage *m,
 
     sco_listen(t);
 
-    pa_bluetooth_transport_put(t);
-
-    pa_log_debug("Transport %s available for profile %s", t->path, pa_bluetooth_profile_to_string(t->profile));
+    if (p != PA_BLUETOOTH_PROFILE_HFP_HF)
+        transport_put(t);
 
     pa_assert_se(r = dbus_message_new_method_return(m));
 

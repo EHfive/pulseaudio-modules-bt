@@ -89,7 +89,7 @@ struct pa_bluetooth_transport {
     pa_a2dp_source_t *a2dp_source;
 
     uint8_t codec;
-    uint8_t *config;
+    void *config;
     size_t config_size;
 
     uint16_t microphone_gain;

@@ -158,7 +158,10 @@ pa_bluetooth_transport *pa_bluetooth_transport_new(pa_bluetooth_device *d, const
 
     if (size > 0) {
         t->config = pa_xnew(uint8_t, size);
-        memcpy(t->config, config, size);
+        if (config)
+            memcpy(t->config, config, size);
+        else
+            memset(t->config, 0, size);
     }
 
     return t;

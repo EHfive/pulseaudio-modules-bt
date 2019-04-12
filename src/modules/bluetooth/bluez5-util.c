@@ -1070,12 +1070,12 @@ static void parse_stream_endpoint_properties(pa_bluetooth_stream_endpoint *sep, 
         bool is_sink;
 
         if(pa_streq(PA_BLUETOOTH_UUID_A2DP_SINK, sep->uuid)){
-            expected_device_uuid = PA_BLUETOOTH_UUID_A2DP_SOURCE;
-            is_sink = true;
-        }
-        else if(pa_streq(PA_BLUETOOTH_UUID_A2DP_SOURCE, sep->uuid)){
             expected_device_uuid = PA_BLUETOOTH_UUID_A2DP_SINK;
             is_sink = false;
+        }
+        else if(pa_streq(PA_BLUETOOTH_UUID_A2DP_SOURCE, sep->uuid)){
+            expected_device_uuid = PA_BLUETOOTH_UUID_A2DP_SOURCE;
+            is_sink = true;
         }
         else {
             pa_log_debug("Unknown sep UUID: %s", sep->uuid);

@@ -2130,11 +2130,6 @@ static int add_card(struct userdata *u) {
             continue;
         }
 
-        if (has_both && pa_streq(uuid, PA_BLUETOOTH_UUID_HSP_HS)) {
-            pa_log_info("device support HSP and HFP, selecting HFP only");
-            continue;
-        }
-
         if (uuid_to_profile(uuid, &profile) < 0)
             continue;
 

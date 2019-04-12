@@ -94,6 +94,7 @@ struct pa_bluetooth_discovery {
     int headset_backend;
     pa_bluetooth_backend *ofono_backend, *native_backend;
     PA_LLIST_HEAD(pa_dbus_pending, pending);
+    bool enable_native_hfp_hf;
 };
 
 struct sep_set_configuration_reply_data {
@@ -177,15 +178,29 @@ static const char *transport_state_to_string(pa_bluetooth_transport_state_t stat
 }
 
 static bool device_supports_profile(pa_bluetooth_device *device, pa_bluetooth_profile_t profile) {
+    bool show_hfp, show_hsp, enable_native_hfp_hf;
+
+    enable_native_hfp_hf = pa_bluetooth_discovery_get_enable_native_hfp_hf(device->discovery);
+
+    if (enable_native_hfp_hf) {
+        show_hfp = pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_HF);
+        show_hsp = !show_hfp;
+    } else {
+        show_hfp = false;
+        show_hsp = true;
+    }
+
     switch (profile) {
         case PA_BLUETOOTH_PROFILE_A2DP_SINK:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_A2DP_SINK);
         case PA_BLUETOOTH_PROFILE_A2DP_SOURCE:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_A2DP_SOURCE);
         case PA_BLUETOOTH_PROFILE_HSP_HS:
-            return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS)
-                || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS_ALT)
-                || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_HF);
+            return show_hsp
+	      && ( !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS)
+		   || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_HS_ALT));
+        case PA_BLUETOOTH_PROFILE_HFP_HF:
+            return show_hfp && !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_HF);
         case PA_BLUETOOTH_PROFILE_HFP_AG:
             return !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HSP_AG)
                 || !!pa_hashmap_get(device->uuids, PA_BLUETOOTH_UUID_HFP_AG);
@@ -639,6 +654,14 @@ pa_bluetooth_device* pa_bluetooth_discovery_get_device_by_path(pa_bluetooth_disc
         return d;
 
     return NULL;
+}
+
+bool pa_bluetooth_discovery_get_enable_native_hfp_hf(pa_bluetooth_discovery *y)
+{
+    pa_assert(y);
+    pa_assert(PA_REFCNT_VALUE(y) > 0);
+
+    return y->enable_native_hfp_hf;
 }
 
 pa_bluetooth_device* pa_bluetooth_discovery_get_device_by_address(pa_bluetooth_discovery *y, const char *remote, const char *local) {
@@ -1588,6 +1611,8 @@ const char *pa_bluetooth_profile_to_string(pa_bluetooth_profile_t profile) {
             return "a2dp_source";
         case PA_BLUETOOTH_PROFILE_HSP_HS:
             return "headset_head_unit";
+        case PA_BLUETOOTH_PROFILE_HFP_HF:
+            return "headset_handsfree";
         case PA_BLUETOOTH_PROFILE_HFP_AG:
             return "headset_audio_gateway";
         case PA_BLUETOOTH_PROFILE_OFF:
@@ -1994,7 +2019,7 @@ static void endpoint_done(pa_bluetooth_discovery *y, pa_bluetooth_profile_t prof
     }
 }
 
-pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backend) {
+pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backend, bool enable_native_hfp_hf) {
     pa_bluetooth_discovery *y;
     DBusError err;
     DBusConnection *conn;
@@ -2004,6 +2029,7 @@ pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *c, int headset_backe
     PA_REFCNT_INIT(y);
     y->core = c;
     y->headset_backend = headset_backend;
+    y->enable_native_hfp_hf = enable_native_hfp_hf;
     y->adapters = pa_hashmap_new_full(pa_idxset_string_hash_func, pa_idxset_string_compare_func, NULL,
                                       (pa_free_cb_t) adapter_free);
     y->devices = pa_hashmap_new_full(pa_idxset_string_hash_func, pa_idxset_string_compare_func, NULL,

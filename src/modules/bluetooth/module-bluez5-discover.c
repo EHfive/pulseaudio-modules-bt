@@ -107,6 +107,7 @@ int pa__init(pa_module *m) {
     const char *headset_str, *a2dp_config;
     int headset_backend;
     bool autodetect_mtu;
+    bool enable_native_hfp_hf = true;
 
     pa_assert(m);
 
@@ -130,6 +131,9 @@ int pa__init(pa_module *m) {
     autodetect_mtu = false;
     if (pa_modargs_get_value_boolean(ma, "autodetect_mtu", &autodetect_mtu) < 0) {
         pa_log("Invalid boolean value for autodetect_mtu parameter");
+    }
+    if (pa_modargs_get_value_boolean(ma, "enable_native_hfp_hf", &enable_native_hfp_hf) < 0) {
+        pa_log("enable_native_hfp_hf must be true or false");
         goto fail;
     }
 
@@ -143,7 +147,7 @@ int pa__init(pa_module *m) {
     u->a2dp_config = pa_xmemdup(a2dp_config, strlen(a2dp_config) + 1);
     u->loaded_device_paths = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
 
-    if (!(u->discovery = pa_bluetooth_discovery_get(u->core, headset_backend)))
+    if (!(u->discovery = pa_bluetooth_discovery_get(u->core, headset_backend, enable_native_hfp_hf)))
         goto fail;
 
     u->device_connection_changed_slot =

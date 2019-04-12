@@ -59,6 +59,7 @@ typedef enum profile {
     PA_BLUETOOTH_PROFILE_A2DP_SINK,
     PA_BLUETOOTH_PROFILE_A2DP_SOURCE,
     PA_BLUETOOTH_PROFILE_HSP_HS,
+    PA_BLUETOOTH_PROFILE_HFP_HF,
     PA_BLUETOOTH_PROFILE_HFP_AG,
     PA_BLUETOOTH_PROFILE_OFF
 } pa_bluetooth_profile_t;
@@ -206,8 +207,9 @@ static inline bool pa_bluetooth_uuid_is_hsp_hs(const char *uuid) {
 #define HEADSET_BACKEND_NATIVE 1
 #define HEADSET_BACKEND_AUTO 2
 
-pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *core, int headset_backend);
+pa_bluetooth_discovery* pa_bluetooth_discovery_get(pa_core *core, int headset_backend, bool default_profile_hfp);
 pa_bluetooth_discovery* pa_bluetooth_discovery_ref(pa_bluetooth_discovery *y);
 void pa_bluetooth_discovery_unref(pa_bluetooth_discovery *y);
 void pa_bluetooth_discovery_set_ofono_running(pa_bluetooth_discovery *y, bool is_running);
+bool pa_bluetooth_discovery_get_enable_native_hfp_hf(pa_bluetooth_discovery *y);
 #endif

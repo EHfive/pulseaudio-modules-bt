@@ -546,7 +546,7 @@ static int transport_state_from_string(const char* value, pa_bluetooth_transport
 pa_bluetooth_stream_endpoint *pa_bluetooth_device_get_sep_by_codec_index(pa_bluetooth_device *d,
                                                                          pa_a2dp_codec_index_t codec_index) {
     void *state;
-    pa_bluetooth_stream_endpoint *sep;
+    pa_bluetooth_stream_endpoint *sep, *res = NULL;
 
     pa_assert(d);
 
@@ -555,8 +555,8 @@ pa_bluetooth_stream_endpoint *pa_bluetooth_device_get_sep_by_codec_index(pa_blue
 
     PA_HASHMAP_FOREACH(sep, d->discovery->seps, state)
         if (sep->valid && sep->device == d && sep->codec_index == codec_index)
-            return sep;
-    return NULL;
+            res = sep;
+    return res;
 }
 
 static void parse_transport_property(pa_bluetooth_transport *t, DBusMessageIter *i) {

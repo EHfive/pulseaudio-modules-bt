@@ -1030,19 +1030,19 @@ static void parse_stream_endpoint_property(pa_bluetooth_stream_endpoint *sep, DB
         case DBUS_TYPE_ARRAY: {
             DBusMessageIter ai;
             uint8_t *config;
-            size_t size;
+            int size = 0;
 
             dbus_message_iter_recurse(&variant_i, &ai);
 
             if (dbus_message_iter_get_arg_type(&ai) == DBUS_TYPE_BYTE && pa_streq(key, "Capabilities")) {
-                dbus_message_iter_get_fixed_array(&ai, &config, (int *) &size);
+                dbus_message_iter_get_fixed_array(&ai, &config, &size);
                 sep->config_size = size;
                 if (size > 0) {
                     sep->config = pa_xnew(uint8_t, size);
                     memcpy(sep->config, config, size);
                 }
 
-                pa_log_debug("%s size:%lu", key, size);
+                pa_log_debug("%s size:%u", key, size);
             }
 
             break;

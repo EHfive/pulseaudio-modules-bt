@@ -31,7 +31,8 @@ option(CODEC_APTX_FF "aptX Classic support using FFmpeg" ON)
 option(CODEC_APTX_HD_FF "aptX HD support using FFmpeg" ON)
 option(CODEC_LDAC "LDAC encoding, abr support using libldac" ON)
 option(FORCE_LARGEST_PA_VERSION "Build for largest available version( <= PulseAudio git master) of PulseAudio" OFF)
-
+option(OFONO_HEADSET "ofono HFP headset support" ON)
+option(NATIVE_HEADSET "native HSP headset support" ON)
 
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-D_REENTRANT)
@@ -51,14 +52,23 @@ set(PulseAudio_CORE_LIBDIR ${PulseAudio_LIBDIR}/pulseaudio)
 set(MOD_BT_DIR ${PROJECT_SOURCE_DIR}/src/modules/bluetooth)
 
 set(bluez5_util_SOURCES
-        ${MOD_BT_DIR}/backend-native.c
-        ${MOD_BT_DIR}/backend-ofono.c
         ${MOD_BT_DIR}/bluez5-util.c
         ${MOD_BT_DIR}/a2dp/a2dp_sbc.c
         ${MOD_BT_DIR}/a2dp/a2dp_util.c
         )
 set(bluez5_util_RPATH "")
 set(bluez5_util_LIBS "")
+
+if(${OFONO_HEADSET} STREQUAL "ON")
+    set(HAVE_BLUEZ_5_OFONO_HEADSET 1)
+    set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/backend-ofono.c)
+    message("[HFP] ofono HFP headset support enabled")
+endif()
+if(${NATIVE_HEADSET} STREQUAL "ON")
+    set(HAVE_BLUEZ_5_NATIVE_HEADSET 1)
+    set(bluez5_util_SOURCES ${bluez5_util_SOURCES} ${MOD_BT_DIR}/backend-native.c)
+    message("[HSP] native HSP headset support enabled")
+endif()
 
 if(${AVCODEC_FOUND} AND ${AVUTIL_FOUND})
     if(${CODEC_APTX_FF} STREQUAL "ON")

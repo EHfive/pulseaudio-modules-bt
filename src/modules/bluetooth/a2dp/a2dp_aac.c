@@ -91,7 +91,7 @@ pa_aac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
     info->read_buf_free = free_cb;
     info->aacenc_handle_opened = false;
     info->aac_enc_bitrate_mode = 5;
-    info->aac_afterburner = false;
+    info->aac_afterburner = true;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
     return true;
 }
@@ -104,7 +104,7 @@ pa_aac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
  *                     s32      32-bit signed LE (encoder)
  *                     auto
  *
- * aac_afterburner     <on/off> FDK-AAC afterburner feature (encoder)     off
+ * aac_afterburner     <on/off> FDK-AAC afterburner feature (encoder)     on
  */
 static int pa_aac_update_user_config(pa_proplist *user_config, void **codec_data) {
     aac_info_t *i = *codec_data;

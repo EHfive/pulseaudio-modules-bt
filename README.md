@@ -132,7 +132,7 @@ Encoders configurations
 |ldac_abr_t3|\<uint>|threshold for critical TxQueueDepth status|6|
 |aac_bitrate_mode|\[1, 5\]|Variable Bitrate (VBR)|5|
 ||0|Constant Bitrate (CBR)|
-|aac_afterburner (which was "aac_after_buffer" before [359ab0](https://github.com/EHfive/pulseaudio-modules-bt/commit/359ab056e002e53978a1e0b53714d5f2e799c30f)|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
+|aac_afterburner (which was "aac_after_buffer" before [359ab0](https://github.com/EHfive/pulseaudio-modules-bt/commit/359ab056e002e53978a1e0b53714d5f2e799c30f)|<on/off>|Enable/Disable AAC encoder afterburner feature|on (off until [feb9f50](https://github.com/EHfive/pulseaudio-modules-bt/commit/feb9f5072f8cf015d89e38f56a524a930682ce15))|
 |aac_fmt|s16|16-bit signed (little endian)|auto|
 ||s32|32-bit signed|
 ||auto|Ref default-sample-format|

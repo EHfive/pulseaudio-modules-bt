@@ -124,7 +124,7 @@ link_directories(${FDKAAC_LIBRARY_DIRS})
 link_directories(${LDACENC_LIBRARY_DIRS} ${LDACABR_LIBRARY_DIRS})
 
 
-string(REGEX MATCH "[0-9]+(\\.[0-9]+)*" PulseAudio_lib_version ${PulseAudio_VERSION})
+string(REGEX MATCH "[0-9]+(\\.[0-9]+)" PulseAudio_lib_version ${PulseAudio_VERSION})
 if("" STREQUAL "${PulseAudio_lib_version}")
     message(SEND_ERROR "Can't match libpulse version")
     set(PulseAudio_lib_version ${PulseAudio_VERSION})

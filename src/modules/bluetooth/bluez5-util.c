@@ -1605,7 +1605,7 @@ const char *pa_bluetooth_a2dp_profile_to_string(pa_a2dp_codec_index_t codec_inde
     else if(codec_index == PA_A2DP_SOURCE_SBC)
         return "a2dp_sink_sbc";
     else if(codec_index == PA_A2DP_SINK_AAC)
-        return "a2dp_source_sbc";
+        return "a2dp_source_aac";
     else if(codec_index == PA_A2DP_SOURCE_AAC)
         return "a2dp_sink_aac";
     else if(codec_index == PA_A2DP_SINK_APTX)

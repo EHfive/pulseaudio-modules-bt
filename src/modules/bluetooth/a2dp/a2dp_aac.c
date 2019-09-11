@@ -90,14 +90,14 @@ pa_aac_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
     info->read_pcm = read_cb;
     info->read_buf_free = free_cb;
     info->aacenc_handle_opened = false;
-    info->aac_enc_bitrate_mode = 5;
+    info->aac_enc_bitrate_mode = 0;
     info->aac_afterburner = false;
     info->force_pa_fmt = PA_SAMPLE_INVALID;
     return true;
 }
 
 /* KEY                 VALUE    DESC                                      DEFAULT
- * aac_bitrate_mode    [1, 5]   Variable Bitrate (VBR) (encoder)          5
+ * aac_bitrate_mode    [1, 5]   Variable Bitrate (VBR) (encoder)          0
  *                     0        Constant Bitrate (CBR) (encoder)
  *
  * aac_fmt             s16      16-bit signed LE (encoder)                auto

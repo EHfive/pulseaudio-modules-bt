@@ -130,7 +130,7 @@ Encoders configurations
 |ldac_abr_t1|\<uint>|safety threshold for LDACBT_EQMID_HQ and LDACBT_EQMID_SQ|2|
 |ldac_abr_t2|\<uint>|threshold for dangerous trend of TxQueueDepth|4|
 |ldac_abr_t3|\<uint>|threshold for critical TxQueueDepth status|6|
-|aac_bitrate_mode|\[1, 5\]|Variable Bitrate (VBR)|5|
+|aac_bitrate_mode|\[1, 5\]|Variable Bitrate (VBR)|0|
 ||0|Constant Bitrate (CBR)|
 |aac_afterburner (which was "aac_after_buffer" before [359ab0](https://github.com/EHfive/pulseaudio-modules-bt/commit/359ab056e002e53978a1e0b53714d5f2e799c30f)|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
 |aac_fmt|s16|16-bit signed (little endian)|auto|

@@ -5,7 +5,7 @@ this repo is a fork of pulseaudio bluetooth modules
 and adds LDAC, APTX, APTX-HD, AAC support
 
 #### Added Codecs
-|Codec|Encoding(source role)|Decoding(sink role)|Sample format(s)|Sample frequnecies|
+|Codec|Encoding(source role)|Decoding(sink role)|Sample format(s)|Sample frequencies|
 |:---:|:---:|:---:|:---:|:---:|
 |AAC |✔ |✔ |s16|8, 11.025, 12,16, 22.05, 24, 32, 44.1, 48, 64, 88.2, 96 khz|
 |APTX | ✔| ✔ |s16|16, 32, 44.1, 48 khz|
@@ -24,7 +24,7 @@ also check issue#3
 
 **Configure modules**
 
-See bottom.
+See [below](#configure).
 
 ### General Installation
 
@@ -42,7 +42,7 @@ See bottom.
 
 **Runtime Dependencies**
 
-* pulseaudio
+* pulseaudio ( force preopen disabled / built with `--disable-force-preopen`)
 * bluez
 * dbus
 * sbc
@@ -68,6 +68,7 @@ git submodule update --init
 ```
 
 **install**
+
 A. build for PulseAudio releases (e.g., v12.0, v12.2, etc.)
 ```bash
 git -C pa/ checkout v`pkg-config libpulse --modversion|sed 's/[^0-9.]*\([0-9.]*\).*/\1/'`
@@ -98,19 +99,20 @@ pulseaudio -k
 pulseaudio --start
 ```
 
+if you got a warning like below, you need to rebuild `pulseaudio` with `--disable-force-preopen` flag
+```
+pulseaudio: symbol lookup error: pulseaudio: undefined symbol: pa_a2dp_codec_sbc
+```
+
 ### Connect device
 
 Connect your bluetooth device and switch audio profile to 'A2DP Sink';
 
 If there is only profile 'HSP/HFP' and 'off', disconnect and reconnect your device.
 
-The issue has been fixed in latest bluez git master, see https://github.com/EHfive/pulseaudio-modules-bt/issues/14#issuecomment-462039332.
+The issue has been fixed in bluez 5.51.
 
-As an alternative, you can fix it with this [udev script](https://gist.github.com/EHfive/c4f1218a75f95b076f0387403246de78).
-
-Run `pactl list | grep a2dp_codec` to see which codec device are using.
-
-#### Module Aruguments
+#### Module Arguments
 
 **module-bluez5-discover arg:a2dp_config**
 
@@ -132,7 +134,7 @@ Encoders configurations
 |ldac_abr_t3|\<uint>|threshold for critical TxQueueDepth status|6|
 |aac_bitrate_mode|\[1, 5\]|Variable Bitrate (VBR)|0|
 ||0|Constant Bitrate (CBR)|
-|aac_afterburner (which was "aac_after_buffer" before [359ab0](https://github.com/EHfive/pulseaudio-modules-bt/commit/359ab056e002e53978a1e0b53714d5f2e799c30f)|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
+|aac_afterburner|<on/off>|Enable/Disable AAC encoder afterburner feature|off|
 |aac_fmt|s16|16-bit signed (little endian)|auto|
 ||s32|32-bit signed|
 ||auto|Ref default-sample-format|

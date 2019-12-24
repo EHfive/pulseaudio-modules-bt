@@ -90,28 +90,30 @@ pa_sbc_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
 static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data) {
     sbc_info_t *i = *codec_data;
     const char *sbc_min_bitpool_str,*sbc_max_bitpool_str;
-    unsigned int sbc_min_bitpool, sbc_max_bitpool;
+    unsigned int sbc_min_bitpool = 0, sbc_max_bitpool = 0;
 
     sbc_min_bitpool_str = pa_proplist_gets(user_config, "sbc_min_bitpool");
     sbc_max_bitpool_str = pa_proplist_gets(user_config, "sbc_max_bitpool");
-    sbc_min_bitpool = sbc_min_bitpool_str ? (unsigned int) atoi(sbc_min_bitpool_str) : 0;
-    sbc_max_bitpool = sbc_max_bitpool_str ? (unsigned int) atoi(sbc_max_bitpool_str) : 0;
 
-    if(sbc_min_bitpool < SBC_MIN_BITPOOL || sbc_min_bitpool > SBC_MAX_BITPOOL)
-    {
-        sbc_min_bitpool=0;
-        pa_log_warn("Forced SBC min bitpool value is invalid, ignoring");
+    if (sbc_min_bitpool_str) {
+        sbc_min_bitpool = (unsigned int) atoi(sbc_min_bitpool_str);
+        if (sbc_min_bitpool < SBC_MIN_BITPOOL || sbc_min_bitpool > SBC_MAX_BITPOOL) {
+            sbc_min_bitpool = 0;
+            pa_log_warn("Forced SBC min bitpool value is invalid, ignoring");
+        }
+        else
+            pa_log_notice("Using forced SBC min bitpool value: %d", sbc_min_bitpool);
     }
-    else
-        pa_log_notice("Using forced SBC min bitpool value: %d", sbc_min_bitpool);
 
-    if(sbc_max_bitpool < sbc_min_bitpool || sbc_max_bitpool > SBC_MAX_BITPOOL)
-    {
-        sbc_max_bitpool=0;
-        pa_log_warn("Forced SBC max bitpool value is invalid, ignoring");
+    if (sbc_max_bitpool_str) {
+        sbc_max_bitpool = (unsigned int) atoi(sbc_max_bitpool_str);
+        if (sbc_max_bitpool < sbc_min_bitpool || sbc_max_bitpool < SBC_MIN_BITPOOL || sbc_max_bitpool > SBC_MAX_BITPOOL) {
+            sbc_max_bitpool=0;
+            pa_log_warn("Forced SBC max bitpool value is invalid, ignoring");
+        }
+        else
+            pa_log_notice("Using forced SBC max bitpool value: %d", sbc_max_bitpool);
     }
-    else
-        pa_log_notice("Using forced SBC max bitpool value: %d", sbc_max_bitpool);
 
     i->forced_min_bitpool = (uint8_t) sbc_min_bitpool;
     i->forced_max_bitpool = (uint8_t) sbc_max_bitpool;

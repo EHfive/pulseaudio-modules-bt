@@ -126,36 +126,36 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
             pa_log_notice("Using forced SBC max bitpool value: %d", sbc_max_bitpool);
     }
 
-    if (sbc_freq_str)
-    {
+    if (!sbc_max_bitpool && sbc_min_bitpool > SBC_MAX_BITPOOL) {
+        sbc_max_bitpool = sbc_min_bitpool;
+        pa_log_notice("SBC min bitpool value exceeding default maximum %d, forcing max bitpool value: %d", SBC_MAX_BITPOOL, sbc_max_bitpool);
+    }
+
+    if (sbc_freq_str) {
         sbc_freq = (uint8_t) atoi(sbc_freq_str);
         if (sbc_freq > 0)
             pa_log_notice("Trying forced SBC frequency value: %d", sbc_freq);
     }
 
-    if (sbc_cmode_str)
-    {
+    if (sbc_cmode_str) {
         sbc_cmode = (uint8_t) atoi(sbc_cmode_str);
         if (sbc_cmode > 0)
             pa_log_notice("Trying forced SBC channel-mode value: %d", sbc_cmode);
     }
 
-    if (sbc_alloc_str)
-    {
+    if (sbc_alloc_str) {
         sbc_alloc = (uint8_t) atoi(sbc_alloc_str);
         if (sbc_alloc > 0)
             pa_log_notice("Trying forced SBC allocation method value: %d", sbc_alloc);
     }
 
-    if (sbc_sbands_str)
-    {
+    if (sbc_sbands_str) {
         sbc_sbands = (uint8_t) atoi(sbc_sbands_str);
         if (sbc_sbands > 0)
             pa_log_notice("Trying forced SBC subbands value: %d", sbc_sbands);
     }
 
-    if (sbc_blen_str)
-    {
+    if (sbc_blen_str) {
         sbc_blen = (uint8_t) atoi(sbc_blen_str);
         if (sbc_blen > 0)
             pa_log_notice("Trying forced SBC block length value: %d", sbc_blen);

@@ -2,7 +2,7 @@
 
 this repo is a fork of pulseaudio bluetooth modules
 
-and adds LDAC, APTX, APTX-HD, AAC support
+and adds LDAC, APTX, APTX-HD, AAC support, extended configuration for SBC
 
 #### Added Codecs
 |Codec|Encoding(source role)|Decoding(sink role)|Sample format(s)|Sample frequencies|
@@ -14,6 +14,25 @@ and adds LDAC, APTX, APTX-HD, AAC support
 
 APTX/APTX_HD sample format fixed to s32 in PA.
 (ffmpeg do the sample format transformation)
+
+#### Extended SBC configuration
+
+Added support for manual (expert) configuration for SBC codec parameters:
+
+* Min and Max bitpool limits (2-250)
+* Sampling frequency
+* Audio channel mode
+* Quantization bit allocation mode
+* Frequency bands number
+* Audio blocks number
+
+You can use this parameters to override and fine-tune default SBC codec config and manually setup configurations like SBC XQ, or Dual Channel HD mode.
+More info about SBC configuration options can be found at [LineageOS documentation](https://lineageos.org/engineering/Bluetooth-SBC-XQ).
+Also there is [interactive calculator](https://btcodecs.valdikss.org.ru/sbc-bitrate-calculator) and unofficial [device compatibility list](https://btcodecs.valdikss.org.ru/codec-compatibility) that may help you to select proper values.
+
+Parameter-names for module-bluez5-discover and valid values provided at the table below.
+
+NOTE: Use these parameters with caution at your own risk! Invalid or extreme "out-of-spec" configurations may sometimes even cause malfunction for some cheap BT-audio devices. Usually these malfunctions can be fixed by resetting audio-device or sometimes simply by reconnecting with valid configuration.
 
 ## Usage
 ### Packages
@@ -120,6 +139,31 @@ Encoders configurations
 
 |Key| Value|Desc |Default|
 |---|---|---|---|
+|sbc_min_bp|2-250|minimum allowed bitpool|0|
+||0|do not enforce minimum bitpool (default)|
+|sbc_max_bp|2-250|maximum allowed bitpool, may not be < sbc_min_bp|0|
+||0|do not enforce maximum bitpool (default)|
+|sbc_freq|8|16000 Hz sample frequency|0|
+||4|32000 Hz sample frequency|
+||2|44100 Hz sample frequency|
+||1|48000 Hz sample frequency|
+||0|do not enforce sample frequency (default)|
+|sbc_cmode|8|mono channel-mode|0|
+||4|dual channel-mode|
+||2|stereo channel-mode|
+||1|joint stereo channel-mode|
+||0|do not enforce channel-mode (default)|
+|sbc_alloc|2|use SNR bit-allocation algorithm|0|
+||1|use loudness bit-allocation algorithm|
+||0|do not enforce bit-allocation algorithm (default)|
+|sbc_sbands|2|4 subbands|0|
+||1|8 subbands|
+||0|do not enforce subbands count (default)|
+|sbc_blen|8|4 audio blocks in one audio frame|0|
+||4|8 audio blocks|
+||2|12 audio blocks|
+||1|16 audio blocks|
+||0|do not enforce audio blocks count (default)|
 |ldac_eqmid|hq|LDAC High Quality|auto|
 ||sq|LDAC Standard Quality|
 ||mq|LDAC Mobile use Quality|

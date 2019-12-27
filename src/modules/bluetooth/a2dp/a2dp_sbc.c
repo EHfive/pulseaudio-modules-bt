@@ -51,14 +51,14 @@ typedef struct sbc_info {
     uint16_t seq_num;                    /* Cumulative packet sequence */
     uint8_t min_bitpool;
     uint8_t max_bitpool;
+
     uint8_t forced_min_bitpool;
     uint8_t forced_max_bitpool;
-
-    int8_t forced_frequency;
-    int8_t forced_channel_mode;
-    int8_t forced_allocation_method;
-    int8_t forced_subbands;
-    int8_t forced_block_length;
+    uint8_t forced_frequency;
+    uint8_t forced_channel_mode;
+    uint8_t forced_allocation_method;
+    uint8_t forced_subbands;
+    uint8_t forced_block_length;
 
     size_t read_block_size;
     size_t write_block_size;
@@ -96,8 +96,7 @@ pa_sbc_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
 static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data) {
     sbc_info_t *i = *codec_data;
     const char *sbc_min_bp_str, *sbc_max_bp_str, *sbc_freq_str, *sbc_cmode_str, *sbc_alloc_str, *sbc_sbands_str, *sbc_blen_str;
-    uint8_t sbc_min_bitpool = 0, sbc_max_bitpool = 0;
-    int8_t sbc_freq = -1, sbc_cmode = -1, sbc_alloc = -1, sbc_sbands = -1, sbc_blen = -1;
+    uint8_t sbc_min_bitpool = 0, sbc_max_bitpool = 0, sbc_freq = 0, sbc_cmode = 0, sbc_alloc = 0, sbc_sbands = 0, sbc_blen = 0;
 
     sbc_min_bp_str = pa_proplist_gets(user_config, "sbc_min_bp");
     sbc_max_bp_str = pa_proplist_gets(user_config, "sbc_max_bp");
@@ -129,32 +128,37 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_freq_str)
     {
-        sbc_freq = (int8_t) atoi(sbc_freq_str);
-        pa_log_notice("Trying forced SBC frequency value: %d", sbc_freq);
+        sbc_freq = (uint8_t) atoi(sbc_freq_str);
+        if (sbc_freq > 0)
+            pa_log_notice("Trying forced SBC frequency value: %d", sbc_freq);
     }
 
     if (sbc_cmode_str)
     {
-        sbc_cmode = (int8_t) atoi(sbc_cmode_str);
-        pa_log_notice("Trying forced SBC channel-mode value: %d", sbc_cmode);
+        sbc_cmode = (uint8_t) atoi(sbc_cmode_str);
+        if (sbc_cmode > 0)
+            pa_log_notice("Trying forced SBC channel-mode value: %d", sbc_cmode);
     }
 
     if (sbc_alloc_str)
     {
-        sbc_alloc = (int8_t) atoi(sbc_alloc_str);
-        pa_log_notice("Trying forced SBC allocation method value: %d", sbc_alloc);
+        sbc_alloc = (uint8_t) atoi(sbc_alloc_str);
+        if (sbc_alloc > 0)
+            pa_log_notice("Trying forced SBC allocation method value: %d", sbc_alloc);
     }
 
     if (sbc_sbands_str)
     {
-        sbc_sbands = (int8_t) atoi(sbc_sbands_str);
-        pa_log_notice("Trying forced SBC subbands value: %d", sbc_sbands);
+        sbc_sbands = (uint8_t) atoi(sbc_sbands_str);
+        if (sbc_sbands > 0)
+            pa_log_notice("Trying forced SBC subbands value: %d", sbc_sbands);
     }
 
     if (sbc_blen_str)
     {
-        sbc_blen = (int8_t) atoi(sbc_blen_str);
-        pa_log_notice("Trying forced SBC block length value: %d", sbc_blen);
+        sbc_blen = (uint8_t) atoi(sbc_blen_str);
+        if (sbc_blen > 0)
+            pa_log_notice("Trying forced SBC block length value: %d", sbc_blen);
     }
 
     i->forced_min_bitpool = sbc_min_bitpool;
@@ -330,7 +334,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
 
     sample_spec->format = PA_SAMPLE_S16LE;
 
-    switch (sbc_info->forced_frequency >= 0 ? sbc_info->forced_frequency : config->frequency) {
+    switch (sbc_info->forced_frequency > 0 ? sbc_info->forced_frequency : config->frequency) {
         case SBC_SAMPLING_FREQ_16000:
             sbc_info->sbc.frequency = SBC_FREQ_16000;
             sample_spec->rate = 16000U;
@@ -351,7 +355,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (sbc_info->forced_channel_mode >= 0 ? sbc_info->forced_channel_mode : config->channel_mode) {
+    switch (sbc_info->forced_channel_mode > 0 ? sbc_info->forced_channel_mode : config->channel_mode) {
         case SBC_CHANNEL_MODE_MONO:
             sbc_info->sbc.mode = SBC_MODE_MONO;
             sample_spec->channels = 1;
@@ -372,7 +376,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (sbc_info->forced_allocation_method >= 0 ? sbc_info->forced_allocation_method : config->allocation_method) {
+    switch (sbc_info->forced_allocation_method > 0 ? sbc_info->forced_allocation_method : config->allocation_method) {
         case SBC_ALLOCATION_SNR:
             sbc_info->sbc.allocation = SBC_AM_SNR;
             break;
@@ -383,7 +387,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (sbc_info->forced_subbands >= 0 ? sbc_info->forced_subbands : config->subbands) {
+    switch (sbc_info->forced_subbands > 0 ? sbc_info->forced_subbands : config->subbands) {
         case SBC_SUBBANDS_4:
             sbc_info->sbc.subbands = SBC_SB_4;
             break;
@@ -394,7 +398,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (sbc_info->forced_block_length >= 0 ? sbc_info->forced_block_length : config->block_length) {
+    switch (sbc_info->forced_block_length > 0 ? sbc_info->forced_block_length : config->block_length) {
         case SBC_BLOCK_LENGTH_4:
             sbc_info->sbc.blocks = SBC_BLK_4;
             break;
@@ -410,7 +414,6 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
         default:
             pa_assert_not_reached();
     }
-
 
     sbc_info->min_bitpool = sbc_info->forced_min_bitpool ? sbc_info->forced_min_bitpool : config->min_bitpool;
     sbc_info->max_bitpool = sbc_info->forced_max_bitpool ? sbc_info->forced_max_bitpool : config->max_bitpool;

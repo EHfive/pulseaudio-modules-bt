@@ -126,11 +126,6 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
             pa_log_notice("Using forced SBC max bitpool value: %d", sbc_max_bitpool);
     }
 
-    if (!sbc_max_bitpool && sbc_min_bitpool > SBC_MAX_BITPOOL) {
-        sbc_max_bitpool = sbc_min_bitpool;
-        pa_log_notice("SBC min bitpool value exceeding default maximum %d, forcing max bitpool value: %d", SBC_MAX_BITPOOL, sbc_max_bitpool);
-    }
-
     if (sbc_freq_str) {
         sbc_freq = (uint8_t) atoi(sbc_freq_str);
         if (sbc_freq > 0)
@@ -417,6 +412,8 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
 
     sbc_info->min_bitpool = sbc_info->forced_min_bitpool ? sbc_info->forced_min_bitpool : config->min_bitpool;
     sbc_info->max_bitpool = sbc_info->forced_max_bitpool ? sbc_info->forced_max_bitpool : config->max_bitpool;
+    if (sbc_info->max_bitpool < sbc_info->min_bitpool)
+        sbc_info->max_bitpool = sbc_info->min_bitpool;
 
     /* Set minimum bitpool for source to get the maximum possible block_size */
     sbc_info->sbc.bitpool = sbc_info->is_a2dp_sink ? sbc_info->min_bitpool : sbc_info->max_bitpool;

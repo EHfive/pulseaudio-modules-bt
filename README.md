@@ -139,10 +139,8 @@ Encoders configurations
 
 |Key| Value|Desc |Default|
 |---|---|---|---|
-|sbc_min_bp|2-250|minimum allowed bitpool|0|
-||0|do not enforce minimum bitpool (default)|
-|sbc_max_bp|2-250|maximum allowed bitpool, may not be < sbc_min_bp|0|
-||0|do not enforce maximum bitpool (default)|
+|sbc_min_bp|2-250|minimum allowed bitpool|auto|
+|sbc_max_bp|2-250|maximum allowed bitpool, may not be < sbc_min_bp|auto|
 |sbc_freq|8|16000 Hz sample frequency|0|
 ||4|32000 Hz sample frequency|
 ||2|44100 Hz sample frequency|

@@ -108,7 +108,7 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_min_bp_str) {
         sbc_min_bitpool = (uint8_t) atoi(sbc_min_bp_str);
-        if (sbc_min_bitpool < SBC_MIN_BITPOOL || sbc_min_bitpool > SBC_MAX_BITPOOL) {
+        if (sbc_min_bitpool < SBC_MIN_BITPOOL || sbc_min_bitpool > SBC_MAX_BITPOOL_FORCED) {
             sbc_min_bitpool = 0;
             pa_log_warn("Forced SBC min bitpool value is invalid, ignoring");
         }
@@ -118,7 +118,7 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_max_bp_str) {
         sbc_max_bitpool = (uint8_t) atoi(sbc_max_bp_str);
-        if (sbc_max_bitpool < sbc_min_bitpool || sbc_max_bitpool < SBC_MIN_BITPOOL || sbc_max_bitpool > SBC_MAX_BITPOOL) {
+        if (sbc_max_bitpool < sbc_min_bitpool || sbc_max_bitpool < SBC_MIN_BITPOOL || sbc_max_bitpool > SBC_MAX_BITPOOL_FORCED) {
             sbc_max_bitpool=0;
             pa_log_warn("Forced SBC max bitpool value is invalid, ignoring");
         }

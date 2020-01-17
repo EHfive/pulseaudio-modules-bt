@@ -141,27 +141,20 @@ Encoders configurations
 |---|---|---|---|
 |sbc_min_bp|2-250|minimum allowed bitpool|auto|
 |sbc_max_bp|2-250|maximum allowed bitpool, may not be < sbc_min_bp|auto|
-|sbc_freq|8|16000 Hz sample frequency|0|
-||4|32000 Hz sample frequency|
-||2|44100 Hz sample frequency|
-||1|48000 Hz sample frequency|
-||0|do not enforce sample frequency (default)|
-|sbc_cmode|8|mono channel-mode|0|
-||4|dual channel-mode|
-||2|stereo channel-mode|
-||1|joint stereo channel-mode|
-||0|do not enforce channel-mode (default)|
-|sbc_alloc|2|use SNR bit-allocation algorithm|0|
-||1|use loudness bit-allocation algorithm|
-||0|do not enforce bit-allocation algorithm (default)|
-|sbc_sbands|2|4 subbands|0|
-||1|8 subbands|
-||0|do not enforce subbands count (default)|
-|sbc_blen|8|4 audio blocks in one audio frame|0|
-||4|8 audio blocks|
-||2|12 audio blocks|
-||1|16 audio blocks|
-||0|do not enforce audio blocks count (default)|
+|sbc_freq|16k, 32k, 44k, 48k|16000/32000/44100/48000 Hz sample frequency|auto|
+||auto|do not enforce sample frequency (default)|
+|sbc_cmode|mono|mono channel-mode|auto|
+||dual|dual channel-mode|
+||stereo|stereo channel-mode|
+||joint_stereo|joint stereo channel-mode|
+||auto|do not enforce channel-mode (default)|
+|sbc_alloc|snr|use SNR bit-allocation algorithm|auto|
+||loudness|use loudness bit-allocation algorithm|
+||auto|do not enforce bit-allocation algorithm (default)|
+|sbc_sbands|4, 8|4 or 8 subbands|auto|
+||auto|do not enforce subbands count (default)|
+|sbc_blen|4, 8, 12, 16|4/8/12/16 audio blocks in one audio frame|auto|
+||auto|do not enforce audio blocks count (default)|
 |ldac_eqmid|hq|LDAC High Quality|auto|
 ||sq|LDAC Standard Quality|
 ||mq|LDAC Mobile use Quality|

@@ -52,6 +52,14 @@ typedef struct sbc_info {
     uint8_t min_bitpool;
     uint8_t max_bitpool;
 
+    uint8_t forced_min_bitpool;
+    uint8_t forced_max_bitpool;
+    uint8_t forced_frequency;
+    uint8_t forced_channel_mode;
+    uint8_t forced_allocation_method;
+    uint8_t forced_subbands;
+    uint8_t forced_block_length;
+
     size_t read_block_size;
     size_t write_block_size;
 
@@ -86,7 +94,127 @@ pa_sbc_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
 }
 
 static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data) {
-    return 0;
+    int ret = 0;
+    sbc_info_t *i = *codec_data;
+    const char *sbc_min_bp_str, *sbc_max_bp_str, *sbc_freq_str, *sbc_cmode_str, *sbc_alloc_str, *sbc_sbands_str, *sbc_blen_str;
+    uint8_t sbc_min_bitpool = 0, sbc_max_bitpool = 0, sbc_freq = 0, sbc_cmode = 0, sbc_alloc = 0, sbc_sbands = 0, sbc_blen = 0;
+
+    sbc_min_bp_str = pa_proplist_gets(user_config, "sbc_min_bp");
+    sbc_max_bp_str = pa_proplist_gets(user_config, "sbc_max_bp");
+    sbc_freq_str = pa_proplist_gets(user_config, "sbc_freq");
+    sbc_cmode_str = pa_proplist_gets(user_config, "sbc_cmode");
+    sbc_alloc_str = pa_proplist_gets(user_config, "sbc_alloc");
+    sbc_sbands_str = pa_proplist_gets(user_config, "sbc_sbands");
+    sbc_blen_str = pa_proplist_gets(user_config, "sbc_blen");
+
+    if (sbc_min_bp_str && !streq(sbc_min_bp_str, "auto")) {
+        sbc_min_bitpool = (uint8_t) atoi(sbc_min_bp_str);
+        if (sbc_min_bitpool < SBC_MIN_BITPOOL || sbc_min_bitpool > SBC_MAX_BITPOOL_FORCED) {
+            sbc_min_bitpool = 0;
+            pa_log_warn("Forced SBC min bitpool value is invalid, ignoring");
+        } else {
+            pa_log_notice("Using forced SBC min bitpool value: %d", sbc_min_bitpool);
+            ret++;
+        }
+    }
+
+    if (sbc_max_bp_str && !streq(sbc_max_bp_str, "auto")) {
+        sbc_max_bitpool = (uint8_t) atoi(sbc_max_bp_str);
+        if (sbc_max_bitpool < sbc_min_bitpool || sbc_max_bitpool < SBC_MIN_BITPOOL || sbc_max_bitpool > SBC_MAX_BITPOOL_FORCED) {
+            sbc_max_bitpool=0;
+            pa_log_warn("Forced SBC max bitpool value is invalid, ignoring");
+        } else {
+            pa_log_notice("Using forced SBC max bitpool value: %d", sbc_max_bitpool);
+            ret++;
+        }
+    }
+
+    if (sbc_freq_str) {
+        if (streq(sbc_freq_str, "16k"))
+            sbc_freq = SBC_SAMPLING_FREQ_16000;
+        else if (streq(sbc_freq_str, "32k"))
+            sbc_freq = SBC_SAMPLING_FREQ_32000;
+        else if (streq(sbc_freq_str, "44k"))
+            sbc_freq = SBC_SAMPLING_FREQ_44100;
+        else if (streq(sbc_freq_str, "48k"))
+            sbc_freq = SBC_SAMPLING_FREQ_48000;
+
+        if (sbc_freq > 0) {
+            pa_log_notice("Using forced SBC frequency: %s", sbc_freq_str);
+            ret++;
+        } else if (!streq(sbc_freq_str, "auto"))
+            pa_log_warn("Forced SBC frequency value is invalid, ignoring");
+    }
+
+    if (sbc_cmode_str) {
+        if (streq(sbc_cmode_str, "mono"))
+            sbc_cmode = SBC_CHANNEL_MODE_MONO;
+        else if (streq(sbc_cmode_str, "dual"))
+            sbc_cmode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
+        else if (streq(sbc_cmode_str, "stereo"))
+            sbc_cmode = SBC_CHANNEL_MODE_STEREO;
+        else if (streq(sbc_cmode_str, "joint_stereo"))
+            sbc_cmode = SBC_CHANNEL_MODE_JOINT_STEREO;
+
+        if (sbc_cmode > 0) {
+            pa_log_notice("Using forced SBC channel-mode: %s", sbc_cmode_str);
+            ret++;
+        } else if (!streq(sbc_cmode_str, "auto"))
+            pa_log_warn("Forced SBC channel-mode value is invalid, ignoring");
+    }
+
+    if (sbc_alloc_str) {
+        if (streq(sbc_alloc_str, "snr"))
+            sbc_alloc = SBC_ALLOCATION_SNR;
+        else if (streq(sbc_alloc_str, "loudness"))
+            sbc_alloc = SBC_ALLOCATION_LOUDNESS;
+
+        if (sbc_alloc > 0) {
+            pa_log_notice("Using forced SBC allocation method: %s", sbc_alloc_str);
+            ret++;
+        } else if (!streq(sbc_alloc_str, "auto"))
+            pa_log_warn("Forced SBC allocation method value is invalid, ignoring");
+    }
+
+    if (sbc_sbands_str) {
+        if (streq(sbc_sbands_str, "4"))
+            sbc_sbands = SBC_SUBBANDS_4;
+        else if (streq(sbc_sbands_str, "8"))
+            sbc_sbands = SBC_SUBBANDS_8;
+
+        if (sbc_sbands > 0) {
+            pa_log_notice("Using forced SBC subbands: %s", sbc_sbands_str);
+            ret++;
+        } else if (!streq(sbc_sbands_str, "auto"))
+            pa_log_warn("Forced SBC subbands value is invalid, ignoring");
+    }
+
+    if (sbc_blen_str) {
+        if (streq(sbc_blen_str, "4"))
+            sbc_blen = SBC_BLOCK_LENGTH_4;
+        else if (streq(sbc_blen_str, "8"))
+            sbc_blen = SBC_BLOCK_LENGTH_8;
+        else if (streq(sbc_blen_str, "12"))
+            sbc_blen = SBC_BLOCK_LENGTH_12;
+        else if (streq(sbc_blen_str, "16"))
+            sbc_blen = SBC_BLOCK_LENGTH_16;
+
+        if (sbc_blen > 0) {
+            pa_log_notice("Trying forced SBC block length: %s", sbc_blen_str);
+            ret++;
+        } else if (!streq(sbc_blen_str, "auto"))
+            pa_log_warn("Forced SBC block length value is invalid, ignoring");
+    }
+
+    i->forced_min_bitpool = sbc_min_bitpool;
+    i->forced_max_bitpool = sbc_max_bitpool;
+    i->forced_frequency = sbc_freq;
+    i->forced_channel_mode = sbc_cmode;
+    i->forced_allocation_method = sbc_alloc;
+    i->forced_subbands = sbc_sbands;
+    i->forced_block_length = sbc_blen;
+
+    return ret;
 }
 
 static size_t
@@ -251,7 +379,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
 
     sample_spec->format = PA_SAMPLE_S16LE;
 
-    switch (config->frequency) {
+    switch (sbc_info->forced_frequency > 0 ? sbc_info->forced_frequency : config->frequency) {
         case SBC_SAMPLING_FREQ_16000:
             sbc_info->sbc.frequency = SBC_FREQ_16000;
             sample_spec->rate = 16000U;
@@ -272,7 +400,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (config->channel_mode) {
+    switch (sbc_info->forced_channel_mode > 0 ? sbc_info->forced_channel_mode : config->channel_mode) {
         case SBC_CHANNEL_MODE_MONO:
             sbc_info->sbc.mode = SBC_MODE_MONO;
             sample_spec->channels = 1;
@@ -293,7 +421,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (config->allocation_method) {
+    switch (sbc_info->forced_allocation_method > 0 ? sbc_info->forced_allocation_method : config->allocation_method) {
         case SBC_ALLOCATION_SNR:
             sbc_info->sbc.allocation = SBC_AM_SNR;
             break;
@@ -304,7 +432,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (config->subbands) {
+    switch (sbc_info->forced_subbands > 0 ? sbc_info->forced_subbands : config->subbands) {
         case SBC_SUBBANDS_4:
             sbc_info->sbc.subbands = SBC_SB_4;
             break;
@@ -315,7 +443,7 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-    switch (config->block_length) {
+    switch (sbc_info->forced_block_length > 0 ? sbc_info->forced_block_length : config->block_length) {
         case SBC_BLOCK_LENGTH_4:
             sbc_info->sbc.blocks = SBC_BLK_4;
             break;
@@ -332,9 +460,10 @@ pa_sbc_config_transport(pa_sample_spec default_sample_spec, const void *configur
             pa_assert_not_reached();
     }
 
-
-    sbc_info->min_bitpool = config->min_bitpool;
-    sbc_info->max_bitpool = config->max_bitpool;
+    sbc_info->min_bitpool = sbc_info->forced_min_bitpool ? sbc_info->forced_min_bitpool : config->min_bitpool;
+    sbc_info->max_bitpool = sbc_info->forced_max_bitpool ? sbc_info->forced_max_bitpool : config->max_bitpool;
+    if (sbc_info->max_bitpool < sbc_info->min_bitpool)
+        sbc_info->max_bitpool = sbc_info->min_bitpool;
 
     /* Set minimum bitpool for source to get the maximum possible block_size */
     sbc_info->sbc.bitpool = sbc_info->is_a2dp_sink ? sbc_info->min_bitpool : sbc_info->max_bitpool;

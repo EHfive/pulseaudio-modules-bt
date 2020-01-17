@@ -131,13 +131,13 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_freq_str) {
         if (streq(sbc_freq_str, "16k"))
-            sbc_freq = 8;
+            sbc_freq = SBC_SAMPLING_FREQ_16000;
         else if (streq(sbc_freq_str, "32k"))
-            sbc_freq = 4;
+            sbc_freq = SBC_SAMPLING_FREQ_32000;
         else if (streq(sbc_freq_str, "44k"))
-            sbc_freq = 2;
+            sbc_freq = SBC_SAMPLING_FREQ_44100;
         else if (streq(sbc_freq_str, "48k"))
-            sbc_freq = 1;
+            sbc_freq = SBC_SAMPLING_FREQ_48000;
 
         if (sbc_freq > 0) {
             pa_log_notice("Using forced SBC frequency: %s", sbc_freq_str);
@@ -148,13 +148,13 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_cmode_str) {
         if (streq(sbc_cmode_str, "mono"))
-            sbc_cmode = 8;
+            sbc_cmode = SBC_CHANNEL_MODE_MONO;
         else if (streq(sbc_cmode_str, "dual"))
-            sbc_cmode = 4;
+            sbc_cmode = SBC_CHANNEL_MODE_DUAL_CHANNEL;
         else if (streq(sbc_cmode_str, "stereo"))
-            sbc_cmode = 2;
+            sbc_cmode = SBC_CHANNEL_MODE_STEREO;
         else if (streq(sbc_cmode_str, "joint_stereo"))
-            sbc_cmode = 1;
+            sbc_cmode = SBC_CHANNEL_MODE_JOINT_STEREO;
 
         if (sbc_cmode > 0) {
             pa_log_notice("Using forced SBC channel-mode: %s", sbc_cmode_str);
@@ -165,9 +165,9 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_alloc_str) {
         if (streq(sbc_alloc_str, "snr"))
-            sbc_alloc = 2;
+            sbc_alloc = SBC_ALLOCATION_SNR;
         else if (streq(sbc_alloc_str, "loudness"))
-            sbc_alloc = 1;
+            sbc_alloc = SBC_ALLOCATION_LOUDNESS;
 
         if (sbc_alloc > 0) {
             pa_log_notice("Using forced SBC allocation method: %s", sbc_alloc_str);
@@ -178,9 +178,9 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_sbands_str) {
         if (streq(sbc_sbands_str, "4"))
-            sbc_sbands = 2;
+            sbc_sbands = SBC_SUBBANDS_4;
         else if (streq(sbc_sbands_str, "8"))
-            sbc_sbands = 1;
+            sbc_sbands = SBC_SUBBANDS_8;
 
         if (sbc_sbands > 0) {
             pa_log_notice("Using forced SBC subbands: %s", sbc_sbands_str);
@@ -191,13 +191,13 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
 
     if (sbc_blen_str) {
         if (streq(sbc_blen_str, "4"))
-            sbc_blen = 8;
+            sbc_blen = SBC_BLOCK_LENGTH_4;
         else if (streq(sbc_blen_str, "8"))
-            sbc_blen = 4;
+            sbc_blen = SBC_BLOCK_LENGTH_8;
         else if (streq(sbc_blen_str, "12"))
-            sbc_blen = 2;
+            sbc_blen = SBC_BLOCK_LENGTH_12;
         else if (streq(sbc_blen_str, "16"))
-            sbc_blen = 1;
+            sbc_blen = SBC_BLOCK_LENGTH_16;
 
         if (sbc_blen > 0) {
             pa_log_notice("Trying forced SBC block length: %s", sbc_blen_str);

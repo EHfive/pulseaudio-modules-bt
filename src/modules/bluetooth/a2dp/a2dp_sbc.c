@@ -94,6 +94,7 @@ pa_sbc_encoder_init(pa_a2dp_source_read_cb_t read_cb, pa_a2dp_source_read_buf_fr
 }
 
 static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data) {
+    int ret = 0;
     sbc_info_t *i = *codec_data;
     const char *sbc_min_bp_str, *sbc_max_bp_str, *sbc_freq_str, *sbc_cmode_str, *sbc_alloc_str, *sbc_sbands_str, *sbc_blen_str;
     uint8_t sbc_min_bitpool = 0, sbc_max_bitpool = 0, sbc_freq = 0, sbc_cmode = 0, sbc_alloc = 0, sbc_sbands = 0, sbc_blen = 0;
@@ -106,54 +107,103 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
     sbc_sbands_str = pa_proplist_gets(user_config, "sbc_sbands");
     sbc_blen_str = pa_proplist_gets(user_config, "sbc_blen");
 
-    if (sbc_min_bp_str) {
+    if (sbc_min_bp_str && !streq(sbc_min_bp_str, "auto")) {
         sbc_min_bitpool = (uint8_t) atoi(sbc_min_bp_str);
         if (sbc_min_bitpool < SBC_MIN_BITPOOL || sbc_min_bitpool > SBC_MAX_BITPOOL_FORCED) {
             sbc_min_bitpool = 0;
             pa_log_warn("Forced SBC min bitpool value is invalid, ignoring");
-        }
-        else
+        } else {
             pa_log_notice("Using forced SBC min bitpool value: %d", sbc_min_bitpool);
+            ret++;
+        }
     }
 
-    if (sbc_max_bp_str) {
+    if (sbc_max_bp_str && !streq(sbc_max_bp_str, "auto")) {
         sbc_max_bitpool = (uint8_t) atoi(sbc_max_bp_str);
         if (sbc_max_bitpool < sbc_min_bitpool || sbc_max_bitpool < SBC_MIN_BITPOOL || sbc_max_bitpool > SBC_MAX_BITPOOL_FORCED) {
             sbc_max_bitpool=0;
             pa_log_warn("Forced SBC max bitpool value is invalid, ignoring");
-        }
-        else
+        } else {
             pa_log_notice("Using forced SBC max bitpool value: %d", sbc_max_bitpool);
+            ret++;
+        }
     }
 
     if (sbc_freq_str) {
-        sbc_freq = (uint8_t) atoi(sbc_freq_str);
-        if (sbc_freq > 0)
-            pa_log_notice("Trying forced SBC frequency value: %d", sbc_freq);
+        if (streq(sbc_freq_str, "16k"))
+            sbc_freq = 8;
+        else if (streq(sbc_freq_str, "32k"))
+            sbc_freq = 4;
+        else if (streq(sbc_freq_str, "44k"))
+            sbc_freq = 2;
+        else if (streq(sbc_freq_str, "48k"))
+            sbc_freq = 1;
+
+        if (sbc_freq > 0) {
+            pa_log_notice("Using forced SBC frequency: %s", sbc_freq_str);
+            ret++;
+        } else if (!streq(sbc_freq_str, "auto"))
+            pa_log_warn("Forced SBC frequency value is invalid, ignoring");
     }
 
     if (sbc_cmode_str) {
-        sbc_cmode = (uint8_t) atoi(sbc_cmode_str);
-        if (sbc_cmode > 0)
-            pa_log_notice("Trying forced SBC channel-mode value: %d", sbc_cmode);
+        if (streq(sbc_cmode_str, "mono"))
+            sbc_cmode = 8;
+        else if (streq(sbc_cmode_str, "dual"))
+            sbc_cmode = 4;
+        else if (streq(sbc_cmode_str, "stereo"))
+            sbc_cmode = 2;
+        else if (streq(sbc_cmode_str, "joint_stereo"))
+            sbc_cmode = 1;
+
+        if (sbc_cmode > 0) {
+            pa_log_notice("Using forced SBC channel-mode: %s", sbc_cmode_str);
+            ret++;
+        } else if (!streq(sbc_cmode_str, "auto"))
+            pa_log_warn("Forced SBC channel-mode value is invalid, ignoring");
     }
 
     if (sbc_alloc_str) {
-        sbc_alloc = (uint8_t) atoi(sbc_alloc_str);
-        if (sbc_alloc > 0)
-            pa_log_notice("Trying forced SBC allocation method value: %d", sbc_alloc);
+        if (streq(sbc_alloc_str, "snr"))
+            sbc_alloc = 2;
+        else if (streq(sbc_alloc_str, "loudness"))
+            sbc_alloc = 1;
+
+        if (sbc_alloc > 0) {
+            pa_log_notice("Using forced SBC allocation method: %s", sbc_alloc_str);
+            ret++;
+        } else if (!streq(sbc_alloc_str, "auto"))
+            pa_log_warn("Forced SBC allocation method value is invalid, ignoring");
     }
 
     if (sbc_sbands_str) {
-        sbc_sbands = (uint8_t) atoi(sbc_sbands_str);
-        if (sbc_sbands > 0)
-            pa_log_notice("Trying forced SBC subbands value: %d", sbc_sbands);
+        if (streq(sbc_sbands_str, "4"))
+            sbc_sbands = 2;
+        else if (streq(sbc_sbands_str, "8"))
+            sbc_sbands = 1;
+
+        if (sbc_sbands > 0) {
+            pa_log_notice("Using forced SBC subbands: %s", sbc_sbands_str);
+            ret++;
+        } else if (!streq(sbc_sbands_str, "auto"))
+            pa_log_warn("Forced SBC subbands value is invalid, ignoring");
     }
 
     if (sbc_blen_str) {
-        sbc_blen = (uint8_t) atoi(sbc_blen_str);
-        if (sbc_blen > 0)
-            pa_log_notice("Trying forced SBC block length value: %d", sbc_blen);
+        if (streq(sbc_blen_str, "4"))
+            sbc_blen = 8;
+        else if (streq(sbc_blen_str, "8"))
+            sbc_blen = 4;
+        else if (streq(sbc_blen_str, "12"))
+            sbc_blen = 2;
+        else if (streq(sbc_blen_str, "16"))
+            sbc_blen = 1;
+
+        if (sbc_blen > 0) {
+            pa_log_notice("Trying forced SBC block length: %s", sbc_blen_str);
+            ret++;
+        } else if (!streq(sbc_blen_str, "auto"))
+            pa_log_warn("Forced SBC block length value is invalid, ignoring");
     }
 
     i->forced_min_bitpool = sbc_min_bitpool;
@@ -164,7 +214,7 @@ static int pa_sbc_update_user_config(pa_proplist *user_config, void **codec_data
     i->forced_subbands = sbc_sbands;
     i->forced_block_length = sbc_blen;
 
-    return 1;
+    return ret;
 }
 
 static size_t

@@ -35,19 +35,18 @@ Parameter-names for module-bluez5-discover and valid values provided at the tabl
 NOTE: Use these parameters with caution at your own risk! Invalid or extreme "out-of-spec" configurations may sometimes even cause malfunction for some cheap BT-audio devices. Usually these malfunctions can be fixed by resetting audio-device or sometimes simply by reconnecting with valid configuration.
 
 ## Usage
-### Packages
 
-[wiki/Packages](https://github.com/EHfive/pulseaudio-modules-bt/wiki/Packages)
+### Pre-built binary packages
 
-also check issue#3
+See the [wiki/Packages](https://github.com/EHfive/pulseaudio-modules-bt/wiki/Packages) to find pre-build binary packages for you distribution.
 
-**Configure modules**
+Please also check [issue#3](https://github.com/EHfive/pulseaudio-modules-bt/issues/3).
 
-See [below](#configure).
+After installing your pre-built binary packages, see [below](#configure) to configure the module.
 
-### General Installation
+### Build from source
 
-**Make Dependencies**
+#### Make Dependencies
 
 * pulseaudio>=11.59.1
 * bluez~=5.0
@@ -59,7 +58,11 @@ See [below](#configure).
 * cmake
 * pkg-config, libtool, ...
 
-**Runtime Dependencies**
+On Debian based distributions (like Ubuntu), you can install the make dependencies with:
+
+`sudo apt-get install -y libfdk-aac-dev libavcodec-dev libpulse-dev libdbus-1-dev libsbc-dev libldacbt-abr-dev libldacbt-enc-dev libltdl-dev libbluetooth-dev`
+
+#### Runtime Dependencies
 
 * pulseaudio ( force preopen disabled / built with `--disable-force-preopen`)
 * bluez
@@ -80,6 +83,9 @@ sudo find $MODDIR -regex ".*\(bluez5\|bluetooth\).*\.so" -exec cp {} {}.bak \;
 ```
 
 **pull sources**
+
+Make sure to pull into a filesystem that supports colons (`:`) as valid characters in filename (see [#144](https://github.com/EHfive/pulseaudio-modules-bt/issues/144)). Ext4 does, while NTFS does not.
+
 ```bash
 git clone https://github.com/EHfive/pulseaudio-modules-bt.git
 cd pulseaudio-modules-bt
